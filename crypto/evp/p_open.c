@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #ifndef OPENSSL_NO_RSA
 
@@ -88,7 +88,7 @@ int EVP_OpenInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *type,
     }
 
     size = RSA_size(priv->pkey.rsa);
-    key = (unsigned char *)OPENSSL_malloc(size + 2);
+    key = OPENSSL_malloc(size + 2);
     if (key == NULL) {
         /* ERROR */
         EVPerr(EVP_F_EVP_OPENINIT, ERR_R_MALLOC_FAILURE);
@@ -105,9 +105,7 @@ int EVP_OpenInit(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *type,
 
     ret = 1;
  err:
-    if (key != NULL)
-        OPENSSL_cleanse(key, size);
-    OPENSSL_free(key);
+    OPENSSL_clear_free(key, size);
     return (ret);
 }
 

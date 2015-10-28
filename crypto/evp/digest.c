@@ -110,7 +110,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/evp.h>
 #ifndef OPENSSL_NO_ENGINE
@@ -119,12 +119,12 @@
 
 void EVP_MD_CTX_init(EVP_MD_CTX *ctx)
 {
-    memset(ctx, '\0', sizeof *ctx);
+    memset(ctx, 0, sizeof(*ctx));
 }
 
 EVP_MD_CTX *EVP_MD_CTX_create(void)
 {
-    EVP_MD_CTX *ctx = OPENSSL_malloc(sizeof *ctx);
+    EVP_MD_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
 
     if (ctx)
         EVP_MD_CTX_init(ctx);
@@ -281,7 +281,7 @@ int EVP_MD_CTX_copy_ex(EVP_MD_CTX *out, const EVP_MD_CTX *in)
     } else
         tmp_buf = NULL;
     EVP_MD_CTX_cleanup(out);
-    memcpy(out, in, sizeof *out);
+    memcpy(out, in, sizeof(*out));
 
     if (in->md_data && out->digest->ctx_size) {
         if (tmp_buf)
@@ -349,8 +349,7 @@ int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx)
         ctx->digest->cleanup(ctx);
     if (ctx->digest && ctx->digest->ctx_size && ctx->md_data
         && !EVP_MD_CTX_test_flags(ctx, EVP_MD_CTX_FLAG_REUSE)) {
-        OPENSSL_cleanse(ctx->md_data, ctx->digest->ctx_size);
-        OPENSSL_free(ctx->md_data);
+        OPENSSL_clear_free(ctx->md_data, ctx->digest->ctx_size);
     }
     EVP_PKEY_CTX_free(ctx->pctx);
 #ifndef OPENSSL_NO_ENGINE
@@ -361,7 +360,7 @@ int EVP_MD_CTX_cleanup(EVP_MD_CTX *ctx)
          */
         ENGINE_finish(ctx->engine);
 #endif
-    memset(ctx, '\0', sizeof *ctx);
+    memset(ctx, 0, sizeof(*ctx));
 
     return 1;
 }

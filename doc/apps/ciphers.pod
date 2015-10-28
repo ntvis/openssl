@@ -117,15 +117,16 @@ The following is a list of all permitted cipher strings and their meanings.
 
 =item B<DEFAULT>
 
-the default cipher list. This is determined at compile time and, as of OpenSSL
-1.0.0, is normally B<ALL:!aNULL:!eNULL>. This must be the first cipher string
-specified.
+the default cipher list. This is determined at compile time and
+is B<ALL:!COMPLEMENTOFDEFAULT:!eNULL>. This must be the first cipher
+string specified.
 
 =item B<COMPLEMENTOFDEFAULT>
 
 the ciphers included in B<ALL>, but not enabled by default. Currently
-this is B<ADH> and B<AECDH>. Note that this rule does not cover B<eNULL>,
-which is not included by B<ALL> (use B<COMPLEMENTOFALL> if necessary).
+this includes all RC4, DES, RC2 and anonymous ciphers. Note that this rule does
+not cover B<eNULL>, which is not included by B<ALL> (use B<COMPLEMENTOFALL> if
+necessary).
 
 =item B<ALL>
 
@@ -260,6 +261,13 @@ cipher suites using 128 bit AES, 256 bit AES or either 128 or 256 bit AES.
 AES in Galois Counter Mode (GCM): these ciphersuites are only supported
 in TLS v1.2.
 
+=item B<AESCCM>, B<AESCCM8>
+
+AES in Cipher Block Chaining - Message Authentication Mode (CCM): these
+ciphersuites are only supported in TLS v1.2. B<AESCCM> references CCM
+cipher suites using both 16 and 8 octet Integrity Check Value (ICV)
+while B<AESCCM8> only references 8 octet ICV.
+
 =item B<CAMELLIA128>, B<CAMELLIA256>, B<CAMELLIA>
 
 cipher suites using 128 bit CAMELLIA, 256 bit CAMELLIA or either 128 or 256 bit
@@ -303,17 +311,12 @@ ciphersuites using SHA256 or SHA384.
 
 =item B<aGOST> 
 
-cipher suites using GOST R 34.10 (either 2001 or 94) for authenticaction
+cipher suites using GOST R 34.10 (either 2001 or 94) for authentication
 (needs an engine supporting GOST algorithms). 
 
 =item B<aGOST01>
 
 cipher suites using GOST R 34.10-2001 authentication.
-
-=item B<aGOST94>
-
-cipher suites using GOST R 34.10-94 authentication (note that R 34.10-94
-standard has been expired so use GOST R 34.10-2001)
 
 =item B<kGOST>
 
@@ -329,7 +332,16 @@ cipher suites using GOST 28147-89 MAC B<instead of> HMAC.
 
 =item B<PSK>
 
-cipher suites using pre-shared keys (PSK).
+all cipher suites using pre-shared keys (PSK).
+
+=item B<kPSK>, B<kECDHEPSK>, B<kDHEPSK>, B<kRSAPSK>
+
+cipher suites using PSK key exchange, ECDHE_PSK, DHE_PSK or RSA_PSK.
+
+=item B<aPSK>
+
+cipher suites using PSK authentication (currently all PSK modes apart from
+RSA_PSK).
 
 =item B<SUITEB128>, B<SUITEB128ONLY>, B<SUITEB192>
 
@@ -365,10 +377,8 @@ e.g. DES-CBC3-SHA. In these cases, RSA authentication is used.
  SSL_RSA_WITH_DES_CBC_SHA                DES-CBC-SHA
  SSL_RSA_WITH_3DES_EDE_CBC_SHA           DES-CBC3-SHA
 
- SSL_DH_DSS_EXPORT_WITH_DES40_CBC_SHA    EXP-DH-DSS-DES-CBC-SHA
  SSL_DH_DSS_WITH_DES_CBC_SHA             DH-DSS-DES-CBC-SHA
  SSL_DH_DSS_WITH_3DES_EDE_CBC_SHA        DH-DSS-DES-CBC3-SHA
- SSL_DH_RSA_EXPORT_WITH_DES40_CBC_SHA    EXP-DH-RSA-DES-CBC-SHA
  SSL_DH_RSA_WITH_DES_CBC_SHA             DH-RSA-DES-CBC-SHA
  SSL_DH_RSA_WITH_3DES_EDE_CBC_SHA        DH-RSA-DES-CBC3-SHA
  SSL_DHE_DSS_EXPORT_WITH_DES40_CBC_SHA   EXP-DHE-DSS-DES-CBC-SHA
@@ -574,6 +584,19 @@ Note: these ciphers can also be used in SSL v3.
  TLS_DH_anon_WITH_AES_128_GCM_SHA256       ADH-AES128-GCM-SHA256
  TLS_DH_anon_WITH_AES_256_GCM_SHA384       ADH-AES256-GCM-SHA384
 
+ RSA_WITH_AES_128_CCM                      AES128-CCM
+ RSA_WITH_AES_256_CCM                      AES256-CCM
+ DHE_RSA_WITH_AES_128_CCM                  DHE-RSA-AES128-CCM
+ DHE_RSA_WITH_AES_256_CCM                  DHE-RSA-AES256-CCM
+ RSA_WITH_AES_128_CCM_8                    AES128-CCM8
+ RSA_WITH_AES_256_CCM_8                    AES256-CCM8
+ DHE_RSA_WITH_AES_128_CCM_8                DHE-RSA-AES128-CCM8
+ DHE_RSA_WITH_AES_256_CCM_8                DHE-RSA-AES256-CCM8
+ ECDHE_ECDSA_WITH_AES_128_CCM              ECDHE-ECDSA-AES128-CCM
+ ECDHE_ECDSA_WITH_AES_256_CCM              ECDHE-ECDSA-AES256-CCM
+ ECDHE_ECDSA_WITH_AES_128_CCM_8            ECDHE-ECDSA-AES128-CCM8
+ ECDHE_ECDSA_WITH_AES_256_CCM_8            ECDHE-ECDSA-AES256-CCM8
+
 =head2 Camellia HMAC-Based ciphersuites from RFC6367, extending TLS v1.2
 
  TLS_ECDHE_ECDSA_WITH_CAMELLIA_128_CBC_SHA256 ECDHE-ECDSA-CAMELLIA128-SHA256
@@ -585,12 +608,79 @@ Note: these ciphers can also be used in SSL v3.
  TLS_ECDH_RSA_WITH_CAMELLIA_128_CBC_SHA256    ECDH-RSA-CAMELLIA128-SHA256
  TLS_ECDH_RSA_WITH_CAMELLIA_256_CBC_SHA384    ECDH-RSA-CAMELLIA256-SHA384
 
-=head2 Pre shared keying (PSK) cipheruites
+=head2 Pre shared keying (PSK) ciphersuites
 
- TLS_PSK_WITH_RC4_128_SHA                  PSK-RC4-SHA
- TLS_PSK_WITH_3DES_EDE_CBC_SHA             PSK-3DES-EDE-CBC-SHA
- TLS_PSK_WITH_AES_128_CBC_SHA              PSK-AES128-CBC-SHA
- TLS_PSK_WITH_AES_256_CBC_SHA              PSK-AES256-CBC-SHA
+ PSK_WITH_NULL_SHA                         PSK-NULL-SHA
+ DHE_PSK_WITH_NULL_SHA                     DHE-PSK-NULL-SHA
+ RSA_PSK_WITH_NULL_SHA                     RSA-PSK-NULL-SHA
+
+ PSK_WITH_RC4_128_SHA                      PSK-RC4-SHA
+ PSK_WITH_3DES_EDE_CBC_SHA                 PSK-3DES-EDE-CBC-SHA
+ PSK_WITH_AES_128_CBC_SHA                  PSK-AES128-CBC-SHA
+ PSK_WITH_AES_256_CBC_SHA                  PSK-AES256-CBC-SHA
+
+ DHE_PSK_WITH_RC4_128_SHA                  DHE-PSK-RC4-SHA
+ DHE_PSK_WITH_3DES_EDE_CBC_SHA             DHE-PSK-3DES-EDE-CBC-SHA
+ DHE_PSK_WITH_AES_128_CBC_SHA              DHE-PSK-AES128-CBC-SHA
+ DHE_PSK_WITH_AES_256_CBC_SHA              DHE-PSK-AES256-CBC-SHA
+
+ RSA_PSK_WITH_RC4_128_SHA                  RSA-PSK-RC4-SHA
+ RSA_PSK_WITH_3DES_EDE_CBC_SHA             RSA-PSK-3DES-EDE-CBC-SHA
+ RSA_PSK_WITH_AES_128_CBC_SHA              RSA-PSK-AES128-CBC-SHA
+ RSA_PSK_WITH_AES_256_CBC_SHA              RSA-PSK-AES256-CBC-SHA
+
+ PSK_WITH_AES_128_GCM_SHA256               PSK-AES128-GCM-SHA256
+ PSK_WITH_AES_256_GCM_SHA384               PSK-AES256-GCM-SHA384
+ DHE_PSK_WITH_AES_128_GCM_SHA256           DHE-PSK-AES128-GCM-SHA256
+ DHE_PSK_WITH_AES_256_GCM_SHA384           DHE-PSK-AES256-GCM-SHA384
+ RSA_PSK_WITH_AES_128_GCM_SHA256           RSA-PSK-AES128-GCM-SHA256
+ RSA_PSK_WITH_AES_256_GCM_SHA384           RSA-PSK-AES256-GCM-SHA384
+
+ PSK_WITH_AES_128_CBC_SHA256               PSK-AES128-CBC-SHA256
+ PSK_WITH_AES_256_CBC_SHA384               PSK-AES256-CBC-SHA384
+ PSK_WITH_NULL_SHA256                      PSK-NULL-SHA256
+ PSK_WITH_NULL_SHA384                      PSK-NULL-SHA384
+ DHE_PSK_WITH_AES_128_CBC_SHA256           DHE-PSK-AES128-CBC-SHA256
+ DHE_PSK_WITH_AES_256_CBC_SHA384           DHE-PSK-AES256-CBC-SHA384
+ DHE_PSK_WITH_NULL_SHA256                  DHE-PSK-NULL-SHA256
+ DHE_PSK_WITH_NULL_SHA384                  DHE-PSK-NULL-SHA384
+ RSA_PSK_WITH_AES_128_CBC_SHA256           RSA-PSK-AES128-CBC-SHA256
+ RSA_PSK_WITH_AES_256_CBC_SHA384           RSA-PSK-AES256-CBC-SHA384
+ RSA_PSK_WITH_NULL_SHA256                  RSA-PSK-NULL-SHA256
+ RSA_PSK_WITH_NULL_SHA384                  RSA-PSK-NULL-SHA384
+ PSK_WITH_AES_128_GCM_SHA256               PSK-AES128-GCM-SHA256
+ PSK_WITH_AES_256_GCM_SHA384               PSK-AES256-GCM-SHA384
+
+ ECDHE_PSK_WITH_RC4_128_SHA                ECDHE-PSK-RC4-SHA
+ ECDHE_PSK_WITH_3DES_EDE_CBC_SHA           ECDHE-PSK-3DES-EDE-CBC-SHA
+ ECDHE_PSK_WITH_AES_128_CBC_SHA            ECDHE-PSK-AES128-CBC-SHA
+ ECDHE_PSK_WITH_AES_256_CBC_SHA            ECDHE-PSK-AES256-CBC-SHA
+ ECDHE_PSK_WITH_AES_128_CBC_SHA256         ECDHE-PSK-AES128-CBC-SHA256
+ ECDHE_PSK_WITH_AES_256_CBC_SHA384         ECDHE-PSK-AES256-CBC-SHA384
+ ECDHE_PSK_WITH_NULL_SHA                   ECDHE-PSK-NULL-SHA
+ ECDHE_PSK_WITH_NULL_SHA256                ECDHE-PSK-NULL-SHA256
+ ECDHE_PSK_WITH_NULL_SHA384                ECDHE-PSK-NULL-SHA384
+
+ PSK_WITH_CAMELLIA_128_CBC_SHA256          PSK-CAMELLIA128-SHA256
+ PSK_WITH_CAMELLIA_256_CBC_SHA384          PSK-CAMELLIA256-SHA384
+
+ DHE_PSK_WITH_CAMELLIA_128_CBC_SHA256      DHE-PSK-CAMELLIA128-SHA256
+ DHE_PSK_WITH_CAMELLIA_256_CBC_SHA384      DHE-PSK-CAMELLIA256-SHA384
+
+ RSA_PSK_WITH_CAMELLIA_128_CBC_SHA256      RSA-PSK-CAMELLIA128-SHA256
+ RSA_PSK_WITH_CAMELLIA_256_CBC_SHA384      RSA-PSK-CAMELLIA256-SHA384
+
+ ECDHE_PSK_WITH_CAMELLIA_128_CBC_SHA256    ECDHE-PSK-CAMELLIA128-SHA256
+ ECDHE_PSK_WITH_CAMELLIA_256_CBC_SHA384    ECDHE-PSK-CAMELLIA256-SHA384
+
+ PSK_WITH_AES_128_CCM                      PSK-AES128-CCM
+ PSK_WITH_AES_256_CCM                      PSK-AES256-CCM
+ DHE_PSK_WITH_AES_128_CCM                  DHE-PSK-AES128-CCM
+ DHE_PSK_WITH_AES_256_CCM                  DHE-PSK-AES256-CCM
+ PSK_WITH_AES_128_CCM_8                    PSK-AES128-CCM8
+ PSK_WITH_AES_256_CCM_8                    PSK-AES256-CCM8
+ DHE_PSK_WITH_AES_128_CCM_8                DHE-PSK-AES128-CCM8
+ DHE_PSK_WITH_AES_256_CCM_8                DHE-PSK-AES256-CCM8
 
 =head1 NOTES
 
@@ -621,7 +711,7 @@ Include all RC4 ciphers but leave out those without authentication:
 
  openssl ciphers -v 'RC4:!COMPLEMENTOFDEFAULT'
 
-Include all chiphers with RSA authentication but leave out ciphers without
+Include all ciphers with RSA authentication but leave out ciphers without
 encryption.
 
  openssl ciphers -v 'RSA:!COMPLEMENTOFALL'
@@ -632,7 +722,7 @@ Set security level to 2 and display all ciphers consistent with level 2:
 
 =head1 SEE ALSO
 
-L<s_client(1)|s_client(1)>, L<s_server(1)|s_server(1)>, L<ssl(3)|ssl(3)>
+L<s_client(1)>, L<s_server(1)>, L<ssl(3)>
 
 =head1 HISTORY
 

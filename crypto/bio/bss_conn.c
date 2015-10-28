@@ -59,7 +59,7 @@
 #include <stdio.h>
 #include <errno.h>
 #define USE_SOCKETS
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 
 #ifndef OPENSSL_NO_SOCK
@@ -148,8 +148,7 @@ static int conn_state(BIO *b, BIO_CONNECT *c)
                             *q = '\0';
                             break;
                         }
-                    if (c->param_port != NULL)
-                        OPENSSL_free(c->param_port);
+                    OPENSSL_free(c->param_port);
                     c->param_port = BUF_strdup(p);
                 }
             }
@@ -179,7 +178,7 @@ static int conn_state(BIO *b, BIO_CONNECT *c)
 
         case BIO_CONN_S_CREATE_SOCKET:
             /* now setup address */
-            memset((char *)&c->them, 0, sizeof(c->them));
+            memset(&c->them, 0, sizeof(c->them));
             c->them.sin_family = AF_INET;
             c->them.sin_port = htons((unsigned short)c->port);
             l = (unsigned long)
@@ -190,7 +189,7 @@ static int conn_state(BIO *b, BIO_CONNECT *c)
             c->state = BIO_CONN_S_CREATE_SOCKET;
 
             ret = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (ret == INVALID_SOCKET) {
+            if (ret == (int)INVALID_SOCKET) {
                 SYSerr(SYS_F_SOCKET, get_last_socket_error());
                 ERR_add_error_data(4, "host=", c->param_hostname,
                                    ":", c->param_port);
@@ -270,7 +269,7 @@ static int conn_state(BIO *b, BIO_CONNECT *c)
         }
 
         if (cb != NULL) {
-            if (!(ret = cb((BIO *)b, c->state, ret)))
+            if ((ret = cb((BIO *)b, c->state, ret)) == 0)
                 goto end;
         }
     }
@@ -287,19 +286,12 @@ BIO_CONNECT *BIO_CONNECT_new(void)
 {
     BIO_CONNECT *ret;
 
-    if ((ret = (BIO_CONNECT *)OPENSSL_malloc(sizeof(BIO_CONNECT))) == NULL)
+    if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL)
         return (NULL);
     ret->state = BIO_CONN_S_BEFORE;
     ret->param_hostname = NULL;
     ret->param_port = NULL;
     ret->info_callback = NULL;
-    ret->nbio = 0;
-    ret->ip[0] = 0;
-    ret->ip[1] = 0;
-    ret->ip[2] = 0;
-    ret->ip[3] = 0;
-    ret->port = 0;
-    memset((char *)&ret->them, 0, sizeof(ret->them));
     return (ret);
 }
 
@@ -308,10 +300,8 @@ void BIO_CONNECT_free(BIO_CONNECT *a)
     if (a == NULL)
         return;
 
-    if (a->param_hostname != NULL)
-        OPENSSL_free(a->param_hostname);
-    if (a->param_port != NULL)
-        OPENSSL_free(a->param_port);
+    OPENSSL_free(a->param_hostname);
+    OPENSSL_free(a->param_port);
     OPENSSL_free(a);
 }
 
@@ -323,7 +313,7 @@ BIO_METHOD *BIO_s_connect(void)
 static int conn_new(BIO *bi)
 {
     bi->init = 0;
-    bi->num = INVALID_SOCKET;
+    bi->num = (int)INVALID_SOCKET;
     bi->flags = 0;
     if ((bi->ptr = (char *)BIO_CONNECT_new()) == NULL)
         return (0);
@@ -336,12 +326,12 @@ static void conn_close_socket(BIO *bio)
     BIO_CONNECT *c;
 
     c = (BIO_CONNECT *)bio->ptr;
-    if (bio->num != INVALID_SOCKET) {
+    if (bio->num != (int)INVALID_SOCKET) {
         /* Only do a shutdown if things were established */
         if (c->state == BIO_CONN_S_OK)
             shutdown(bio->num, 2);
         closesocket(bio->num);
-        bio->num = INVALID_SOCKET;
+        bio->num = (int)INVALID_SOCKET;
     }
 }
 
@@ -455,12 +445,10 @@ static long conn_ctrl(BIO *b, int cmd, long num, void *ptr)
         if (ptr != NULL) {
             b->init = 1;
             if (num == 0) {
-                if (data->param_hostname != NULL)
-                    OPENSSL_free(data->param_hostname);
+                OPENSSL_free(data->param_hostname);
                 data->param_hostname = BUF_strdup(ptr);
             } else if (num == 1) {
-                if (data->param_port != NULL)
-                    OPENSSL_free(data->param_port);
+                OPENSSL_free(data->param_port);
                 data->param_port = BUF_strdup(ptr);
             } else if (num == 2) {
                 char buf[16];
@@ -468,16 +456,14 @@ static long conn_ctrl(BIO *b, int cmd, long num, void *ptr)
 
                 BIO_snprintf(buf, sizeof buf, "%d.%d.%d.%d",
                              p[0], p[1], p[2], p[3]);
-                if (data->param_hostname != NULL)
-                    OPENSSL_free(data->param_hostname);
+                OPENSSL_free(data->param_hostname);
                 data->param_hostname = BUF_strdup(buf);
                 memcpy(&(data->ip[0]), ptr, 4);
             } else if (num == 3) {
                 char buf[DECIMAL_SIZE(int) + 1];
 
                 BIO_snprintf(buf, sizeof buf, "%d", *(int *)ptr);
-                if (data->param_port != NULL)
-                    OPENSSL_free(data->param_port);
+                OPENSSL_free(data->param_port);
                 data->param_port = BUF_strdup(buf);
                 data->port = *(int *)ptr;
             }

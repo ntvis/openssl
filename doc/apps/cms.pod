@@ -35,6 +35,8 @@ B<openssl> B<cms>
 [B<-print>]
 [B<-CAfile file>]
 [B<-CApath dir>]
+[B<-no-CAfile>]
+[B<-no-CApath>]
 [B<-attime timestamp>]
 [B<-check_ss_sig>]
 [B<-crl_check>]
@@ -272,6 +274,14 @@ B<-verify>. This directory must be a standard certificate directory: that
 is a hash of each subject name (using B<x509 -hash>) should be linked
 to each certificate.
 
+=item B<-no-CAfile>
+
+Do not load the trusted CA certificates from the default file location
+
+=item B<-no-CApath>
+
+Do not load the trusted CA certificates from the default directory location
+
 =item B<-md digest>
 
 digest algorithm to use when signing or resigning. If not present then the
@@ -376,7 +386,7 @@ identifier extension. Supported by B<-sign> and B<-encrypt> options.
 =item B<-receipt_request_all -receipt_request_first>
 
 for B<-sign> option include a signed receipt request. Indicate requests should
-be provided by all receipient or first tier recipients (those mailed directly
+be provided by all recipient or first tier recipients (those mailed directly
 and not from a mailing list). Ignored it B<-receipt_request_from> is included.
 
 =item B<-receipt_request_from emailaddress>
@@ -398,7 +408,7 @@ requests.
 
 specify symmetric key to use. The key must be supplied in hex format and be
 consistent with the algorithm used. Supported by the B<-EncryptedData_encrypt>
-B<-EncrryptedData_decrypt>, B<-encrypt> and B<-decrypt> options. When used
+B<-EncryptedData_decrypt>, B<-encrypt> and B<-decrypt> options. When used
 with B<-encrypt> or B<-decrypt> the supplied key is used to wrap or unwrap the
 content encryption key using an AES key in the B<KEKRecipientInfo> type.
 
@@ -434,12 +444,12 @@ or to modify default parameters for ECDH.
 =item B<-passin arg>
 
 the private key password source. For more information about the format of B<arg>
-see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)|openssl(1)>.
+see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)>.
 
 =item B<-rand file(s)>
 
 a file or files containing random data used to seed the random number
-generator, or an EGD socket (see L<RAND_egd(3)|RAND_egd(3)>).
+generator, or an EGD socket (see L<RAND_egd(3)>).
 Multiple files can be specified separated by a OS-dependent character.
 The separator is B<;> for MS-Windows, B<,> for OpenVMS, and B<:> for
 all others.
@@ -465,7 +475,7 @@ B<-use_deltas>, B<-verify_depth>, B<-verify_email>, B<-verify_hostname>,
 B<-verify_ip>, B<-verify_name>, B<-x509_strict>
 
 Set various certificate chain validation options. See the
-L<B<verify>|verify(1)> manual page for details.
+L<verify(1)> manual page for details.
 
 =back
 
@@ -515,7 +525,7 @@ tried whether they succeed or not and if no recipients match the message
 is "decrypted" using a random key which will typically output garbage. 
 The B<-debug_decrypt> option can be used to disable the MMA attack protection
 and return an error if no recipient can be found: this option should be used
-with caution. For a fuller description see L<CMS_decrypt(3)|CMS_decrypt(3)>).
+with caution. For a fuller description see L<CMS_decrypt(3)>).
 
 =head1 EXIT CODES
 

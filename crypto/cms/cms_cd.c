@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -63,8 +63,6 @@
 # include <openssl/comp.h>
 #endif
 #include "cms_lcl.h"
-
-DECLARE_ASN1_ITEM(CMS_CompressedData)
 
 #ifdef ZLIB
 
@@ -105,10 +103,7 @@ CMS_ContentInfo *cms_CompressedData_create(int comp_nid)
     return cms;
 
  err:
-
-    if (cms)
-        CMS_ContentInfo_free(cms);
-
+    CMS_ContentInfo_free(cms);
     return NULL;
 }
 

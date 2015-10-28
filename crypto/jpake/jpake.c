@@ -107,14 +107,14 @@ static void JPAKE_CTX_release(JPAKE_CTX *ctx)
     OPENSSL_free(ctx->p.peer_name);
     OPENSSL_free(ctx->p.name);
 
-    memset(ctx, '\0', sizeof *ctx);
+    memset(ctx, 0, sizeof(*ctx));
 }
 
 JPAKE_CTX *JPAKE_CTX_new(const char *name, const char *peer_name,
                          const BIGNUM *p, const BIGNUM *g, const BIGNUM *q,
                          const BIGNUM *secret)
 {
-    JPAKE_CTX *ctx = OPENSSL_malloc(sizeof *ctx);
+    JPAKE_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
     if (ctx == NULL)
         return NULL;
 
@@ -125,6 +125,8 @@ JPAKE_CTX *JPAKE_CTX_new(const char *name, const char *peer_name,
 
 void JPAKE_CTX_free(JPAKE_CTX *ctx)
 {
+    if (!ctx)
+        return;
     JPAKE_CTX_release(ctx);
     OPENSSL_free(ctx);
 }

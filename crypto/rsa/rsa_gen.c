@@ -64,7 +64,7 @@
 
 #include <stdio.h>
 #include <time.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
 
@@ -117,19 +117,19 @@ static int rsa_builtin_keygen(RSA *rsa, int bits, BIGNUM *e_value,
     /* We need the RSA components non-NULL */
     if (!rsa->n && ((rsa->n = BN_new()) == NULL))
         goto err;
-    if (!rsa->d && ((rsa->d = BN_new()) == NULL))
+    if (!rsa->d && ((rsa->d = BN_secure_new()) == NULL))
         goto err;
     if (!rsa->e && ((rsa->e = BN_new()) == NULL))
         goto err;
-    if (!rsa->p && ((rsa->p = BN_new()) == NULL))
+    if (!rsa->p && ((rsa->p = BN_secure_new()) == NULL))
         goto err;
-    if (!rsa->q && ((rsa->q = BN_new()) == NULL))
+    if (!rsa->q && ((rsa->q = BN_secure_new()) == NULL))
         goto err;
-    if (!rsa->dmp1 && ((rsa->dmp1 = BN_new()) == NULL))
+    if (!rsa->dmp1 && ((rsa->dmp1 = BN_secure_new()) == NULL))
         goto err;
-    if (!rsa->dmq1 && ((rsa->dmq1 = BN_new()) == NULL))
+    if (!rsa->dmq1 && ((rsa->dmq1 = BN_secure_new()) == NULL))
         goto err;
-    if (!rsa->iqmp && ((rsa->iqmp = BN_new()) == NULL))
+    if (!rsa->iqmp && ((rsa->iqmp = BN_secure_new()) == NULL))
         goto err;
 
     BN_copy(rsa->e, e_value);
@@ -227,20 +227,16 @@ static int rsa_builtin_keygen(RSA *rsa, int bits, BIGNUM *e_value,
 
     ok = 1;
  err:
-    if (local_r0)
-        BN_free(local_r0);
-    if (local_d)
-        BN_free(local_d);
-    if (local_p)
-        BN_free(local_p);
+    BN_free(local_r0);
+    BN_free(local_d);
+    BN_free(local_p);
     if (ok == -1) {
         RSAerr(RSA_F_RSA_BUILTIN_KEYGEN, ERR_LIB_BN);
         ok = 0;
     }
-    if (ctx != NULL) {
+    if (ctx != NULL)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
+    BN_CTX_free(ctx);
 
     return ok;
 }

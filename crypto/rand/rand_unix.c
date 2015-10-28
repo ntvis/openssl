@@ -112,11 +112,11 @@
 
 #define USE_SOCKETS
 #include "e_os.h"
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/rand.h>
 #include "rand_lcl.h"
 
-#if !(defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_VMS) || defined(OPENSSL_SYS_OS2) || defined(OPENSSL_SYS_VXWORKS) || defined(OPENSSL_SYS_NETWARE))
+#if !(defined(OPENSSL_SYS_WINDOWS) || defined(OPENSSL_SYS_WIN32) || defined(OPENSSL_SYS_VMS) || defined(OPENSSL_SYS_OS2) || defined(OPENSSL_SYS_VXWORKS) || defined(OPENSSL_SYS_NETWARE) || defined(OPENSSL_SYS_UEFI))
 
 # include <sys/types.h>
 # include <sys/time.h>
@@ -250,7 +250,7 @@ int RAND_poll(void)
 #  endif
 #  ifdef DEVRANDOM
     static const char *randomfiles[] = { DEVRANDOM };
-    struct stat randomstats[sizeof(randomfiles) / sizeof(randomfiles[0])];
+    struct stat randomstats[OSSL_NELEM(randomfiles)];
     int fd;
     unsigned int i;
 #  endif
@@ -267,8 +267,7 @@ int RAND_poll(void)
      * out of random entries.
      */
 
-    for (i = 0; (i < sizeof(randomfiles) / sizeof(randomfiles[0])) &&
-         (n < ENTROPY_NEEDED); i++) {
+    for (i = 0; (i < OSSL_NELEM(randomfiles)) && (n < ENTROPY_NEEDED); i++) {
         if ((fd = open(randomfiles[i], O_RDONLY
 #   ifdef O_NONBLOCK
                        | O_NONBLOCK
@@ -420,7 +419,7 @@ int RAND_poll(void)
                                  * defined(OPENSSL_SYS_VXWORKS) ||
                                  * defined(OPENSSL_SYS_NETWARE)) */
 
-#if defined(OPENSSL_SYS_VXWORKS)
+#if defined(OPENSSL_SYS_VXWORKS) || defined(OPENSSL_SYS_UEFI)
 int RAND_poll(void)
 {
     return 0;

@@ -123,7 +123,7 @@
 # include <sys/types.h>
 #endif
 
-#include "o_dir.h"
+#include "internal/o_dir.h"
 #include <openssl/objects.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
@@ -165,35 +165,17 @@ int SSL_get_ex_data_X509_STORE_CTX_idx(void)
     return ssl_x509_store_ctx_idx;
 }
 
-void ssl_cert_set_default_md(CERT *cert)
-{
-    /* Set digest values to defaults */
-#ifndef OPENSSL_NO_DSA
-    cert->pkeys[SSL_PKEY_DSA_SIGN].digest = EVP_sha1();
-#endif
-#ifndef OPENSSL_NO_RSA
-    cert->pkeys[SSL_PKEY_RSA_SIGN].digest = EVP_sha1();
-    cert->pkeys[SSL_PKEY_RSA_ENC].digest = EVP_sha1();
-#endif
-#ifndef OPENSSL_NO_EC
-    cert->pkeys[SSL_PKEY_ECC].digest = EVP_sha1();
-#endif
-}
-
 CERT *ssl_cert_new(void)
 {
-    CERT *ret;
+    CERT *ret = OPENSSL_zalloc(sizeof(*ret));
 
-    ret = (CERT *)OPENSSL_malloc(sizeof(CERT));
     if (ret == NULL) {
         SSLerr(SSL_F_SSL_CERT_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    memset(ret, 0, sizeof(CERT));
 
     ret->key = &(ret->pkeys[SSL_PKEY_RSA_ENC]);
     ret->references = 1;
-    ssl_cert_set_default_md(ret);
     ret->sec_cb = ssl_security_default_callback;
     ret->sec_level = OPENSSL_TLS_SECURITY_LEVEL;
     ret->sec_ex = NULL;
@@ -202,28 +184,16 @@ CERT *ssl_cert_new(void)
 
 CERT *ssl_cert_dup(CERT *cert)
 {
-    CERT *ret;
+    CERT *ret = OPENSSL_zalloc(sizeof(*ret));
     int i;
 
-    ret = (CERT *)OPENSSL_malloc(sizeof(CERT));
     if (ret == NULL) {
         SSLerr(SSL_F_SSL_CERT_DUP, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
 
-    memset(ret, 0, sizeof(CERT));
-
-    ret->key = &ret->pkeys[cert->key - &cert->pkeys[0]];
-    /*
-     * or ret->key = ret->pkeys + (cert->key - cert->pkeys), if you find that
-     * more readable
-     */
-
-    ret->valid = cert->valid;
-    ret->mask_k = cert->mask_k;
-    ret->mask_a = cert->mask_a;
-    ret->export_mask_k = cert->export_mask_k;
-    ret->export_mask_a = cert->export_mask_a;
+    ret->references = 1;
+    ret->key = &ret->pkeys[cert->key - cert->pkeys];
 
 #ifndef OPENSSL_NO_RSA
     if (cert->rsa_tmp != NULL) {
@@ -278,7 +248,7 @@ CERT *ssl_cert_dup(CERT *cert)
         CERT_PKEY *rpk = ret->pkeys + i;
         if (cpk->x509 != NULL) {
             rpk->x509 = cpk->x509;
-            CRYPTO_add(&rpk->x509->references, 1, CRYPTO_LOCK_X509);
+            X509_up_ref(rpk->x509);
         }
 
         if (cpk->privatekey != NULL) {
@@ -293,8 +263,6 @@ CERT *ssl_cert_dup(CERT *cert)
                 goto err;
             }
         }
-        rpk->valid_flags = 0;
-#ifndef OPENSSL_NO_TLSEXT
         if (cert->pkeys[i].serverinfo != NULL) {
             /* Just copy everything. */
             ret->pkeys[i].serverinfo =
@@ -309,20 +277,9 @@ CERT *ssl_cert_dup(CERT *cert)
                    cert->pkeys[i].serverinfo,
                    cert->pkeys[i].serverinfo_length);
         }
-#endif
     }
 
-    ret->references = 1;
-    /*
-     * Set digests to defaults. NB: we don't copy existing values as they
-     * will be set during handshake.
-     */
-    ssl_cert_set_default_md(ret);
-    /* Peer sigalgs set to NULL as we get these from handshake too */
-    ret->peer_sigalgs = NULL;
-    ret->peer_sigalgslen = 0;
-    /* Configured sigalgs however we copy across */
-
+    /* Configured sigalgs copied across */
     if (cert->conf_sigalgs) {
         ret->conf_sigalgs = OPENSSL_malloc(cert->conf_sigalgslen);
         if (!ret->conf_sigalgs)
@@ -368,19 +325,21 @@ CERT *ssl_cert_dup(CERT *cert)
         ret->chain_store = cert->chain_store;
     }
 
-    ret->ciphers_raw = NULL;
-
     ret->sec_cb = cert->sec_cb;
     ret->sec_level = cert->sec_level;
     ret->sec_ex = cert->sec_ex;
 
-#ifndef OPENSSL_NO_TLSEXT
     if (!custom_exts_copy(&ret->cli_ext, &cert->cli_ext))
         goto err;
     if (!custom_exts_copy(&ret->srv_ext, &cert->srv_ext))
         goto err;
+#ifndef OPENSSL_NO_PSK
+    if (cert->psk_identity_hint) {
+        ret->psk_identity_hint = BUF_strdup(cert->psk_identity_hint);
+        if (ret->psk_identity_hint == NULL)
+            goto err;
+    }
 #endif
-
     return (ret);
 
  err:
@@ -398,25 +357,15 @@ void ssl_cert_clear_certs(CERT *c)
         return;
     for (i = 0; i < SSL_PKEY_NUM; i++) {
         CERT_PKEY *cpk = c->pkeys + i;
-        if (cpk->x509) {
-            X509_free(cpk->x509);
-            cpk->x509 = NULL;
-        }
+        X509_free(cpk->x509);
+        cpk->x509 = NULL;
         EVP_PKEY_free(cpk->privatekey);
         cpk->privatekey = NULL;
-        if (cpk->chain) {
-            sk_X509_pop_free(cpk->chain, X509_free);
-            cpk->chain = NULL;
-        }
-#ifndef OPENSSL_NO_TLSEXT
-        if (cpk->serverinfo) {
-            OPENSSL_free(cpk->serverinfo);
-            cpk->serverinfo = NULL;
-            cpk->serverinfo_length = 0;
-        }
-#endif
-        /* Clear all flags apart from explicit sign */
-        cpk->valid_flags &= CERT_PKEY_EXPLICIT_SIGN;
+        sk_X509_pop_free(cpk->chain, X509_free);
+        cpk->chain = NULL;
+        OPENSSL_free(cpk->serverinfo);
+        cpk->serverinfo = NULL;
+        cpk->serverinfo_length = 0;
     }
 }
 
@@ -451,31 +400,17 @@ void ssl_cert_free(CERT *c)
 #endif
 
     ssl_cert_clear_certs(c);
-    if (c->peer_sigalgs)
-        OPENSSL_free(c->peer_sigalgs);
-    if (c->conf_sigalgs)
-        OPENSSL_free(c->conf_sigalgs);
-    if (c->client_sigalgs)
-        OPENSSL_free(c->client_sigalgs);
-    if (c->shared_sigalgs)
-        OPENSSL_free(c->shared_sigalgs);
-    if (c->ctypes)
-        OPENSSL_free(c->ctypes);
-    if (c->verify_store)
-        X509_STORE_free(c->verify_store);
-    if (c->chain_store)
-        X509_STORE_free(c->chain_store);
-    if (c->ciphers_raw)
-        OPENSSL_free(c->ciphers_raw);
-#ifndef OPENSSL_NO_TLSEXT
+    OPENSSL_free(c->conf_sigalgs);
+    OPENSSL_free(c->client_sigalgs);
+    OPENSSL_free(c->shared_sigalgs);
+    OPENSSL_free(c->ctypes);
+    X509_STORE_free(c->verify_store);
+    X509_STORE_free(c->chain_store);
     custom_exts_free(&c->cli_ext);
     custom_exts_free(&c->srv_ext);
+#ifndef OPENSSL_NO_PSK
+    OPENSSL_free(c->psk_identity_hint);
 #endif
-    if (c->pms) {
-        OPENSSL_cleanse(c->pms, c->pmslen);
-        OPENSSL_free(c->pms);
-        c->pms = NULL;
-    }
     OPENSSL_free(c);
 }
 
@@ -485,8 +420,7 @@ int ssl_cert_set0_chain(SSL *s, SSL_CTX *ctx, STACK_OF(X509) *chain)
     CERT_PKEY *cpk = s ? s->cert->key : ctx->cert->key;
     if (!cpk)
         return 0;
-    if (cpk->chain)
-        sk_X509_pop_free(cpk->chain, X509_free);
+    sk_X509_pop_free(cpk->chain, X509_free);
     for (i = 0; i < sk_X509_num(chain); i++) {
         r = ssl_security_cert(s, ctx, sk_X509_value(chain, i), 0, 0);
         if (r != 1) {
@@ -535,7 +469,7 @@ int ssl_cert_add1_chain_cert(SSL *s, SSL_CTX *ctx, X509 *x)
 {
     if (!ssl_cert_add0_chain_cert(s, ctx, x))
         return 0;
-    CRYPTO_add(&x->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(x);
     return 1;
 }
 
@@ -589,79 +523,6 @@ void ssl_cert_set_cert_cb(CERT *c, int (*cb) (SSL *ssl, void *arg), void *arg)
 {
     c->cert_cb = cb;
     c->cert_cb_arg = arg;
-}
-
-SESS_CERT *ssl_sess_cert_new(void)
-{
-    SESS_CERT *ret;
-
-    ret = OPENSSL_malloc(sizeof *ret);
-    if (ret == NULL) {
-        SSLerr(SSL_F_SSL_SESS_CERT_NEW, ERR_R_MALLOC_FAILURE);
-        return NULL;
-    }
-
-    memset(ret, 0, sizeof *ret);
-    ret->peer_key = &(ret->peer_pkeys[SSL_PKEY_RSA_ENC]);
-    ret->references = 1;
-
-    return ret;
-}
-
-void ssl_sess_cert_free(SESS_CERT *sc)
-{
-    int i;
-
-    if (sc == NULL)
-        return;
-
-    i = CRYPTO_add(&sc->references, -1, CRYPTO_LOCK_SSL_SESS_CERT);
-#ifdef REF_PRINT
-    REF_PRINT("SESS_CERT", sc);
-#endif
-    if (i > 0)
-        return;
-#ifdef REF_CHECK
-    if (i < 0) {
-        fprintf(stderr, "ssl_sess_cert_free, bad reference count\n");
-        abort();                /* ok */
-    }
-#endif
-
-    /* i == 0 */
-    if (sc->cert_chain != NULL)
-        sk_X509_pop_free(sc->cert_chain, X509_free);
-    for (i = 0; i < SSL_PKEY_NUM; i++) {
-        if (sc->peer_pkeys[i].x509 != NULL)
-            X509_free(sc->peer_pkeys[i].x509);
-#if 0
-        /*
-         * We don't have the peer's private key. These lines are just
-         * here as a reminder that we're still using a not-quite-appropriate
-         *  data structure.
-         */
-        if (sc->peer_pkeys[i].privatekey != NULL)
-            EVP_PKEY_free(sc->peer_pkeys[i].privatekey);
-#endif
-    }
-
-#ifndef OPENSSL_NO_RSA
-    RSA_free(sc->peer_rsa_tmp);
-#endif
-#ifndef OPENSSL_NO_DH
-    DH_free(sc->peer_dh_tmp);
-#endif
-#ifndef OPENSSL_NO_EC
-    EC_KEY_free(sc->peer_ecdh_tmp);
-#endif
-
-    OPENSSL_free(sc);
-}
-
-int ssl_set_peer_cert_type(SESS_CERT *sc, int type)
-{
-    sc->peer_cert_type = type;
-    return (1);
 }
 
 int ssl_verify_cert_chain(SSL *s, STACK_OF(X509) *sk)
@@ -726,9 +587,7 @@ int ssl_verify_cert_chain(SSL *s, STACK_OF(X509) *sk)
 static void set_client_CA_list(STACK_OF(X509_NAME) **ca_list,
                                STACK_OF(X509_NAME) *name_list)
 {
-    if (*ca_list != NULL)
-        sk_X509_NAME_pop_free(*ca_list, X509_NAME_free);
-
+    sk_X509_NAME_pop_free(*ca_list, X509_NAME_free);
     *ca_list = name_list;
 }
 
@@ -813,7 +672,6 @@ static int xname_cmp(const X509_NAME *const *a, const X509_NAME *const *b)
     return (X509_NAME_cmp(*a, *b));
 }
 
-#ifndef OPENSSL_NO_STDIO
 /**
  * Load CA certs from a file into a ::STACK. Note that it is somewhat misnamed;
  * it doesn't really have anything to do with clients (except that a common use
@@ -831,7 +689,7 @@ STACK_OF(X509_NAME) *SSL_load_client_CA_file(const char *file)
 
     sk = sk_X509_NAME_new(xname_cmp);
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
 
     if ((sk == NULL) || (in == NULL)) {
         SSLerr(SSL_F_SSL_LOAD_CLIENT_CA_FILE, ERR_R_MALLOC_FAILURE);
@@ -864,23 +722,19 @@ STACK_OF(X509_NAME) *SSL_load_client_CA_file(const char *file)
             sk_X509_NAME_push(ret, xn);
         }
     }
+    goto done;
 
-    if (0) {
  err:
-        if (ret != NULL)
-            sk_X509_NAME_pop_free(ret, X509_NAME_free);
-        ret = NULL;
-    }
-    if (sk != NULL)
-        sk_X509_NAME_free(sk);
+    sk_X509_NAME_pop_free(ret, X509_NAME_free);
+    ret = NULL;
+ done:
+    sk_X509_NAME_free(sk);
     BIO_free(in);
-    if (x != NULL)
-        X509_free(x);
+    X509_free(x);
     if (ret != NULL)
         ERR_clear_error();
     return (ret);
 }
-#endif
 
 /**
  * Add a file of certs to a stack.
@@ -902,7 +756,7 @@ int SSL_add_file_cert_subjects_to_stack(STACK_OF(X509_NAME) *stack,
 
     oldcmp = sk_X509_NAME_set_cmp_func(stack, xname_cmp);
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
 
     if (in == NULL) {
         SSLerr(SSL_F_SSL_ADD_FILE_CERT_SUBJECTS_TO_STACK,
@@ -928,17 +782,14 @@ int SSL_add_file_cert_subjects_to_stack(STACK_OF(X509_NAME) *stack,
     }
 
     ERR_clear_error();
+    goto done;
 
-    if (0) {
  err:
         ret = 0;
-    }
+ done:
     BIO_free(in);
-    if (x != NULL)
-        X509_free(x);
-
+    X509_free(x);
     (void)sk_X509_NAME_set_cmp_func(stack, oldcmp);
-
     return ret;
 }
 
@@ -1184,8 +1035,7 @@ int ssl_build_cert_chain(SSL *s, SSL_CTX *ctx, int flags)
         if (sk_X509_num(chain) > 0) {
             /* See if last cert is self signed */
             x = sk_X509_value(chain, sk_X509_num(chain) - 1);
-            X509_check_purpose(x, -1, 0);
-            if (x->ex_flags & EXFLAG_SS) {
+            if (X509_get_extension_flags(x) & EXFLAG_SS) {
                 x = sk_X509_pop(chain);
                 X509_free(x);
             }
@@ -1205,8 +1055,7 @@ int ssl_build_cert_chain(SSL *s, SSL_CTX *ctx, int flags)
             goto err;
         }
     }
-    if (cpk->chain)
-        sk_X509_pop_free(cpk->chain, X509_free);
+    sk_X509_pop_free(cpk->chain, X509_free);
     cpk->chain = chain;
     if (rv == 0)
         rv = 1;
@@ -1224,8 +1073,7 @@ int ssl_cert_set_cert_store(CERT *c, X509_STORE *store, int chain, int ref)
         pstore = &c->chain_store;
     else
         pstore = &c->verify_store;
-    if (*pstore)
-        X509_STORE_free(*pstore);
+    X509_STORE_free(*pstore);
     *pstore = store;
     if (ref && store)
         CRYPTO_add(&store->references, 1, CRYPTO_LOCK_X509_STORE);

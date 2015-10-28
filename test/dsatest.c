@@ -136,7 +136,7 @@ int main(int argc, char **argv)
     unsigned int siglen;
 
     if (bio_err == NULL)
-        bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
+        bio_err = BIO_new_fp(stderr, BIO_NOCLOSE | BIO_FP_TEXT);
 
     CRYPTO_malloc_debug_init();
     CRYPTO_dbg_set_options(V_CRYPTO_MDEBUG_ALL);
@@ -212,8 +212,7 @@ int main(int argc, char **argv)
     if (!ret)
         ERR_print_errors(bio_err);
     DSA_free(dsa);
-    if (cb != NULL)
-        BN_GENCB_free(cb);
+    BN_GENCB_free(cb);
     CRYPTO_cleanup_all_ex_data();
     ERR_remove_thread_state(NULL);
     ERR_free_strings();

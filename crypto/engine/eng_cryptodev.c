@@ -42,22 +42,9 @@
 # endif
 #endif
 
-#ifndef HAVE_CRYPTODEV
-
-void ENGINE_load_cryptodev(void)
-{
-    /* This is a NOP on platforms without /dev/crypto */
-    return;
-}
-
-#else
-
-# include <sys/types.h>
+#include <sys/types.h>
+#ifdef HAVE_CRYPTODEV
 # include <crypto/cryptodev.h>
-# include <openssl/dh.h>
-# include <openssl/dsa.h>
-# include <openssl/err.h>
-# include <openssl/rsa.h>
 # include <sys/ioctl.h>
 # include <errno.h>
 # include <stdio.h>
@@ -67,6 +54,21 @@ void ENGINE_load_cryptodev(void)
 # include <syslog.h>
 # include <errno.h>
 # include <string.h>
+#endif
+#include <openssl/dh.h>
+#include <openssl/dsa.h>
+#include <openssl/err.h>
+#include <openssl/rsa.h>
+
+#ifndef HAVE_CRYPTODEV
+
+void ENGINE_load_cryptodev(void)
+{
+    /* This is a NOP on platforms without /dev/crypto */
+    return;
+}
+
+#else
 
 struct dev_crypto_state {
     struct session_op d_sess;
@@ -478,7 +480,7 @@ cryptodev_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
         return (0);
     }
 
-    memset(sess, 0, sizeof(struct session_op));
+    memset(sess, 0, sizeof(*sess));
 
     if ((state->d_fd = get_dev_crypto()) < 0)
         return (0);
@@ -535,7 +537,7 @@ static int cryptodev_cleanup(EVP_CIPHER_CTX *ctx)
  */
 
 /* RC4 */
-const EVP_CIPHER cryptodev_rc4 = {
+static const EVP_CIPHER cryptodev_rc4 = {
     NID_rc4,
     1, 16, 0,
     EVP_CIPH_VARIABLE_LENGTH,
@@ -549,7 +551,7 @@ const EVP_CIPHER cryptodev_rc4 = {
 };
 
 /* DES CBC EVP */
-const EVP_CIPHER cryptodev_des_cbc = {
+static const EVP_CIPHER cryptodev_des_cbc = {
     NID_des_cbc,
     8, 8, 8,
     EVP_CIPH_CBC_MODE,
@@ -563,7 +565,7 @@ const EVP_CIPHER cryptodev_des_cbc = {
 };
 
 /* 3DES CBC EVP */
-const EVP_CIPHER cryptodev_3des_cbc = {
+static const EVP_CIPHER cryptodev_3des_cbc = {
     NID_des_ede3_cbc,
     8, 24, 8,
     EVP_CIPH_CBC_MODE,
@@ -576,7 +578,7 @@ const EVP_CIPHER cryptodev_3des_cbc = {
     NULL
 };
 
-const EVP_CIPHER cryptodev_bf_cbc = {
+static const EVP_CIPHER cryptodev_bf_cbc = {
     NID_bf_cbc,
     8, 16, 8,
     EVP_CIPH_CBC_MODE,
@@ -589,7 +591,7 @@ const EVP_CIPHER cryptodev_bf_cbc = {
     NULL
 };
 
-const EVP_CIPHER cryptodev_cast_cbc = {
+static const EVP_CIPHER cryptodev_cast_cbc = {
     NID_cast5_cbc,
     8, 16, 8,
     EVP_CIPH_CBC_MODE,
@@ -602,7 +604,7 @@ const EVP_CIPHER cryptodev_cast_cbc = {
     NULL
 };
 
-const EVP_CIPHER cryptodev_aes_cbc = {
+static const EVP_CIPHER cryptodev_aes_cbc = {
     NID_aes_128_cbc,
     16, 16, 16,
     EVP_CIPH_CBC_MODE,
@@ -615,7 +617,7 @@ const EVP_CIPHER cryptodev_aes_cbc = {
     NULL
 };
 
-const EVP_CIPHER cryptodev_aes_192_cbc = {
+static const EVP_CIPHER cryptodev_aes_192_cbc = {
     NID_aes_192_cbc,
     16, 24, 16,
     EVP_CIPH_CBC_MODE,
@@ -628,7 +630,7 @@ const EVP_CIPHER cryptodev_aes_192_cbc = {
     NULL
 };
 
-const EVP_CIPHER cryptodev_aes_256_cbc = {
+static const EVP_CIPHER cryptodev_aes_256_cbc = {
     NID_aes_256_cbc,
     16, 32, 16,
     EVP_CIPH_CBC_MODE,
@@ -770,7 +772,7 @@ static int cryptodev_digest_init(EVP_MD_CTX *ctx)
         return (0);
     }
 
-    memset(state, 0, sizeof(struct dev_crypto_state));
+    memset(state, 0, sizeof(*state));
 
     if ((state->d_fd = get_dev_crypto()) < 0) {
         printf("cryptodev_digest_init: Can't get Dev \n");
@@ -889,11 +891,9 @@ static int cryptodev_digest_cleanup(EVP_MD_CTX *ctx)
         return (0);
     }
 
-    if (state->mac_data) {
-        OPENSSL_free(state->mac_data);
-        state->mac_data = NULL;
-        state->mac_len = 0;
-    }
+    OPENSSL_free(state->mac_data);
+    state->mac_data = NULL;
+    state->mac_len = 0;
 
     if (ioctl(state->d_fd, CIOCFSESSION, &sess->ses) < 0) {
         printf("cryptodev_digest_cleanup: failed to close session\n");
@@ -1022,10 +1022,9 @@ static int bn2crparam(const BIGNUM *a, struct crparam *crp)
     bits = BN_num_bits(a);
     bytes = BN_num_bytes(a);
 
-    b = OPENSSL_malloc(bytes);
+    b = OPENSSL_zalloc(bytes);
     if (b == NULL)
         return (1);
-    memset(b, 0, bytes);
 
     crp->crp_p = (caddr_t) b;
     crp->crp_nbits = bits;
@@ -1045,7 +1044,7 @@ static int crparam2bn(struct crparam *crp, BIGNUM *a)
     if (bytes == 0)
         return (-1);
 
-    if ((pd = (u_int8_t *) OPENSSL_malloc(bytes)) == NULL)
+    if ((pd = OPENSSL_malloc(bytes)) == NULL)
         return (-1);
 
     for (i = 0; i < bytes; i++)
@@ -1117,7 +1116,7 @@ cryptodev_bn_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
         return (ret);
     }
 
-    memset(&kop, 0, sizeof kop);
+    memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_MOD_EXP;
 
     /* inputs: a^p % m */
@@ -1168,7 +1167,7 @@ cryptodev_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
         return (0);
     }
 
-    memset(&kop, 0, sizeof kop);
+    memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_MOD_EXP_CRT;
     /* inputs: rsa->p rsa->q I rsa->dmp1 rsa->dmq1 rsa->iqmp */
     if (bn2crparam(rsa->p, &kop.crk_param[0]))
@@ -1271,7 +1270,7 @@ static DSA_SIG *cryptodev_dsa_do_sign(const unsigned char *dgst, int dlen,
         goto err;
     }
 
-    memset(&kop, 0, sizeof kop);
+    memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_DSA_SIGN;
 
     /* inputs: dgst dsa->p dsa->q dsa->g dsa->priv_key */
@@ -1311,7 +1310,7 @@ cryptodev_dsa_verify(const unsigned char *dgst, int dlen,
     struct crypt_kop kop;
     int dsaret = 1;
 
-    memset(&kop, 0, sizeof kop);
+    memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_DSA_VERIFY;
 
     /* inputs: dgst dsa->p dsa->q dsa->g dsa->pub_key sig->r sig->s */
@@ -1384,7 +1383,7 @@ cryptodev_dh_compute_key(unsigned char *key, const BIGNUM *pub_key, DH *dh)
 
     keylen = BN_num_bits(dh->p);
 
-    memset(&kop, 0, sizeof kop);
+    memset(&kop, 0, sizeof(kop));
     kop.crk_op = CRK_DH_COMPUTE_KEY;
 
     /* inputs: dh->priv_key pub_key dh->p key */

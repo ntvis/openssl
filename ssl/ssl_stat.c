@@ -117,6 +117,9 @@ const char *SSL_state_string_long(const SSL *s)
     case SSL_ST_OK | SSL_ST_ACCEPT:
         str = "ok/accept SSL initialization";
         break;
+    case SSL_ST_ERR:
+        str = "error";
+        break;
 
 #ifndef OPENSSL_NO_SSL3
 /* SSLv3 additions */
@@ -299,28 +302,6 @@ const char *SSL_state_string_long(const SSL *s)
         break;
 #endif
 
-/* SSLv2/v3 compatibility states */
-/* client */
-    case SSL23_ST_CW_CLNT_HELLO_A:
-        str = "SSLv2/v3 write client hello A";
-        break;
-    case SSL23_ST_CW_CLNT_HELLO_B:
-        str = "SSLv2/v3 write client hello B";
-        break;
-    case SSL23_ST_CR_SRVR_HELLO_A:
-        str = "SSLv2/v3 read server hello A";
-        break;
-    case SSL23_ST_CR_SRVR_HELLO_B:
-        str = "SSLv2/v3 read server hello B";
-        break;
-/* server */
-    case SSL23_ST_SR_CLNT_HELLO_A:
-        str = "SSLv2/v3 read client hello A";
-        break;
-    case SSL23_ST_SR_CLNT_HELLO_B:
-        str = "SSLv2/v3 read client hello B";
-        break;
-
 /* DTLS */
     case DTLS1_ST_CR_HELLO_VERIFY_REQUEST_A:
         str = "DTLS1 read hello verify request A";
@@ -359,6 +340,9 @@ const char *SSL_state_string(const SSL *s)
         break;
     case SSL_ST_OK:
         str = "SSLOK ";
+        break;
+    case SSL_ST_ERR:
+        str = "SSLERR";
         break;
 
 #ifndef OPENSSL_NO_SSL3
@@ -528,28 +512,6 @@ const char *SSL_state_string(const SSL *s)
         str = "3RCV_B";
         break;
 #endif
-
-/* SSLv2/v3 compatibility states */
-/* client */
-    case SSL23_ST_CW_CLNT_HELLO_A:
-        str = "23WCHA";
-        break;
-    case SSL23_ST_CW_CLNT_HELLO_B:
-        str = "23WCHB";
-        break;
-    case SSL23_ST_CR_SRVR_HELLO_A:
-        str = "23RSHA";
-        break;
-    case SSL23_ST_CR_SRVR_HELLO_B:
-        str = "23RSHA";
-        break;
-/* server */
-    case SSL23_ST_SR_CLNT_HELLO_A:
-        str = "23RCHA";
-        break;
-    case SSL23_ST_SR_CLNT_HELLO_B:
-        str = "23RCHB";
-        break;
 
 /* DTLS */
     case DTLS1_ST_CR_HELLO_VERIFY_REQUEST_A:

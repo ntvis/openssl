@@ -204,25 +204,10 @@
 # include OPENSSL_UNISTD
 #endif
 
-#ifdef OPENSSL_SYS_VMS
-# define TEST_SERVER_CERT "SYS$DISK:[-.APPS]SERVER.PEM"
-# define TEST_CLIENT_CERT "SYS$DISK:[-.APPS]CLIENT.PEM"
-#elif defined(OPENSSL_SYS_WINCE)
-# define TEST_SERVER_CERT "\\OpenSSL\\server.pem"
-# define TEST_CLIENT_CERT "\\OpenSSL\\client.pem"
-#elif defined(OPENSSL_SYS_NETWARE)
-# define TEST_SERVER_CERT "\\openssl\\apps\\server.pem"
-# define TEST_CLIENT_CERT "\\openssl\\apps\\client.pem"
-#else
-# define TEST_SERVER_CERT "../apps/server.pem"
-# define TEST_CLIENT_CERT "../apps/client.pem"
-#endif
-
 /*
- * There is really no standard for this, so let's assign some tentative
- * numbers.  In any case, these numbers are only for this test
+ * There is really no standard for this, so let's assign something
+ * only for this test
  */
-#define COMP_RLE        255
 #define COMP_ZLIB       1
 
 static int verify_callback(int ok, X509_STORE_CTX *ctx);
@@ -303,9 +288,9 @@ static BIO *bio_stdout = NULL;
 #ifndef OPENSSL_NO_NEXTPROTONEG
 /* Note that this code assumes that this is only a one element list: */
 static const char NEXT_PROTO_STRING[] = "\x09testproto";
-int npn_client = 0;
-int npn_server = 0;
-int npn_server_reject = 0;
+static int npn_client = 0;
+static int npn_server = 0;
+static int npn_server_reject = 0;
 
 static int cb_client_npn(SSL *s, unsigned char **out, unsigned char *outlen,
                          const unsigned char *in, unsigned int inlen,
@@ -466,10 +451,8 @@ static int verify_alpn(SSL *client, SSL *server)
     SSL_get0_alpn_selected(client, &client_proto, &client_proto_len);
     SSL_get0_alpn_selected(server, &server_proto, &server_proto_len);
 
-    if (alpn_selected != NULL) {
-        OPENSSL_free(alpn_selected);
-        alpn_selected = NULL;
-    }
+    OPENSSL_free(alpn_selected);
+    alpn_selected = NULL;
 
     if (client_proto_len != server_proto_len ||
         memcmp(client_proto, server_proto, client_proto_len) != 0) {
@@ -517,24 +500,24 @@ static int verify_alpn(SSL *client, SSL *server)
 #define CUSTOM_EXT_TYPE_2 1002
 #define CUSTOM_EXT_TYPE_3 1003
 
-const char custom_ext_cli_string[] = "abc";
-const char custom_ext_srv_string[] = "defg";
+static const char custom_ext_cli_string[] = "abc";
+static const char custom_ext_srv_string[] = "defg";
 
 /* These set from cmdline */
-char *serverinfo_file = NULL;
-int serverinfo_sct = 0;
-int serverinfo_tack = 0;
+static char *serverinfo_file = NULL;
+static int serverinfo_sct = 0;
+static int serverinfo_tack = 0;
 
 /* These set based on extension callbacks */
-int serverinfo_sct_seen = 0;
-int serverinfo_tack_seen = 0;
-int serverinfo_other_seen = 0;
+static int serverinfo_sct_seen = 0;
+static int serverinfo_tack_seen = 0;
+static int serverinfo_other_seen = 0;
 
 /* This set from cmdline */
-int custom_ext = 0;
+static int custom_ext = 0;
 
 /* This set based on extension callbacks */
-int custom_ext_error = 0;
+static int custom_ext_error = 0;
 
 static int serverinfo_cli_parse_cb(SSL *s, unsigned int ext_type,
                                    const unsigned char *in, size_t inlen,
@@ -769,7 +752,9 @@ static void sv_usage(void)
             " -bytes <val>  - number of bytes to swap between client/server\n");
 #ifndef OPENSSL_NO_DH
     fprintf(stderr,
-            " -dhe1024      - use 1024 bit key (safe prime) for DHE\n");
+            " -dhe512       - use 512 bit key for DHE (to test failure)\n");
+    fprintf(stderr,
+            " -dhe1024      - use 1024 bit key (safe prime) for DHE (default, no-op)\n");
     fprintf(stderr,
             " -dhe1024dsa   - use 1024 bit key (with 160-bit subprime) for DHE\n");
     fprintf(stderr, " -no_dhe       - disable DHE\n");
@@ -806,7 +791,6 @@ static void sv_usage(void)
     fprintf(stderr,
             " -time         - measure processor time used by client and server\n");
     fprintf(stderr, " -zlib         - use zlib compression\n");
-    fprintf(stderr, " -rle          - use rle compression\n");
 #ifndef OPENSSL_NO_EC
     fprintf(stderr,
             " -named_curve arg  - Elliptic curve name to use for ephemeral ECDH keys.\n"
@@ -967,10 +951,6 @@ int main(int argc, char *argv[])
     int server_auth = 0, i;
     struct app_verify_arg app_verify_arg =
         { APP_CALLBACK_STRING, 0, 0, NULL, NULL };
-    char *server_cert = TEST_SERVER_CERT;
-    char *server_key = NULL;
-    char *client_cert = TEST_CLIENT_CERT;
-    char *client_key = NULL;
 #ifndef OPENSSL_NO_EC
     char *named_curve = NULL;
 #endif
@@ -982,7 +962,7 @@ int main(int argc, char *argv[])
     long bytes = 256L;
 #ifndef OPENSSL_NO_DH
     DH *dh;
-    int dhe1024 = 0, dhe1024dsa = 0;
+    int dhe512 = 0, dhe1024dsa = 0;
 #endif
 #ifndef OPENSSL_NO_EC
     EC_KEY *ecdh = NULL;
@@ -999,7 +979,7 @@ int main(int argc, char *argv[])
     int print_time = 0;
     clock_t s_time = 0, c_time = 0;
 #ifndef OPENSSL_NO_COMP
-    int comp = 0;
+    int n, comp = 0;
     COMP_METHOD *cm = NULL;
     STACK_OF(SSL_COMP) *ssl_comp_methods = NULL;
 #endif
@@ -1008,7 +988,6 @@ int main(int argc, char *argv[])
     int fips_mode = 0;
 #endif
     int no_protocol = 0;
-    int n;
 
     SSL_CONF_CTX *s_cctx = NULL, *c_cctx = NULL;
     STACK_OF(OPENSSL_STRING) *conf_args = NULL;
@@ -1046,14 +1025,18 @@ int main(int argc, char *argv[])
     }
 
     SSL_CONF_CTX_set_flags(s_cctx,
-                           SSL_CONF_FLAG_CMDLINE | SSL_CONF_FLAG_SERVER);
+                           SSL_CONF_FLAG_CMDLINE | SSL_CONF_FLAG_SERVER |
+                           SSL_CONF_FLAG_CERTIFICATE |
+                           SSL_CONF_FLAG_REQUIRE_PRIVATE);
     if (!SSL_CONF_CTX_set1_prefix(s_cctx, "-s_")) {
         ERR_print_errors(bio_err);
         goto end;
     }
 
     SSL_CONF_CTX_set_flags(c_cctx,
-                           SSL_CONF_FLAG_CMDLINE | SSL_CONF_FLAG_CLIENT);
+                           SSL_CONF_FLAG_CMDLINE | SSL_CONF_FLAG_CLIENT |
+                           SSL_CONF_FLAG_CERTIFICATE |
+                           SSL_CONF_FLAG_REQUIRE_PRIVATE);
     if (!SSL_CONF_CTX_set1_prefix(c_cctx, "-c_")) {
         ERR_print_errors(bio_err);
         goto end;
@@ -1063,7 +1046,7 @@ int main(int argc, char *argv[])
     argv++;
 
     while (argc >= 1) {
-        if (!strcmp(*argv, "-F")) {
+        if (strcmp(*argv, "-F") == 0) {
 #ifdef OPENSSL_FIPS
             fips_mode = 1;
 #else
@@ -1089,19 +1072,19 @@ int main(int argc, char *argv[])
             debug = 1;
         else if (strcmp(*argv, "-reuse") == 0)
             reuse = 1;
-        else if (strcmp(*argv, "-dhe1024") == 0) {
+        else if (strcmp(*argv, "-dhe512") == 0) {
 #ifndef OPENSSL_NO_DH
-            dhe1024 = 1;
+            dhe512 = 1;
 #else
             fprintf(stderr,
-                    "ignoring -dhe1024, since I'm compiled without DH\n");
+                    "ignoring -dhe512, since I'm compiled without DH\n");
 #endif
         } else if (strcmp(*argv, "-dhe1024dsa") == 0) {
 #ifndef OPENSSL_NO_DH
             dhe1024dsa = 1;
 #else
             fprintf(stderr,
-                    "ignoring -dhe1024, since I'm compiled without DH\n");
+                    "ignoring -dhe1024dsa, since I'm compiled without DH\n");
 #endif
         } else if (strcmp(*argv, "-no_dhe") == 0)
             no_dhe = 1;
@@ -1168,30 +1151,6 @@ int main(int argc, char *argv[])
                 bytes *= 1024L;
             if (argv[0][i - 1] == 'm')
                 bytes *= 1024L * 1024L;
-        } else if (strcmp(*argv, "-cert") == 0) {
-            if (--argc < 1)
-                goto bad;
-            server_cert = *(++argv);
-        } else if (strcmp(*argv, "-s_cert") == 0) {
-            if (--argc < 1)
-                goto bad;
-            server_cert = *(++argv);
-        } else if (strcmp(*argv, "-key") == 0) {
-            if (--argc < 1)
-                goto bad;
-            server_key = *(++argv);
-        } else if (strcmp(*argv, "-s_key") == 0) {
-            if (--argc < 1)
-                goto bad;
-            server_key = *(++argv);
-        } else if (strcmp(*argv, "-c_cert") == 0) {
-            if (--argc < 1)
-                goto bad;
-            client_cert = *(++argv);
-        } else if (strcmp(*argv, "-c_key") == 0) {
-            if (--argc < 1)
-                goto bad;
-            client_key = *(++argv);
         } else if (strcmp(*argv, "-cipher") == 0) {
             if (--argc < 1)
                 goto bad;
@@ -1214,8 +1173,6 @@ int main(int argc, char *argv[])
 #ifndef OPENSSL_NO_COMP
         else if (strcmp(*argv, "-zlib") == 0) {
             comp = COMP_ZLIB;
-        } else if (strcmp(*argv, "-rle") == 0) {
-            comp = COMP_RLE;
         }
 #endif
         else if (strcmp(*argv, "-named_curve") == 0) {
@@ -1353,7 +1310,7 @@ int main(int argc, char *argv[])
     if (fips_mode) {
         if (!FIPS_mode_set(1)) {
             ERR_load_crypto_strings();
-            ERR_print_errors(BIO_new_fp(stderr, BIO_NOCLOSE));
+            ERR_print_errors(bio_err);
             EXIT(1);
         } else
             fprintf(stderr, "*** IN FIPS MODE ***\n");
@@ -1378,10 +1335,8 @@ int main(int argc, char *argv[])
 #ifndef OPENSSL_NO_COMP
     if (comp == COMP_ZLIB)
         cm = COMP_zlib();
-    if (comp == COMP_RLE)
-        cm = COMP_rle();
     if (cm != NULL) {
-        if (cm->type != NID_undef) {
+        if (COMP_get_type(cm) != NID_undef) {
             if (SSL_COMP_add_compression_method(comp, cm) != 0) {
                 fprintf(stderr, "Failed to add compression method\n");
                 ERR_print_errors_fp(stderr);
@@ -1389,8 +1344,7 @@ int main(int argc, char *argv[])
         } else {
             fprintf(stderr,
                     "Warning: %s compression not supported\n",
-                    (comp == COMP_RLE ? "rle" :
-                     (comp == COMP_ZLIB ? "zlib" : "unknown")));
+                    comp == COMP_ZLIB ? "zlib" : "unknown");
             ERR_print_errors_fp(stderr);
         }
     }
@@ -1427,7 +1381,7 @@ int main(int argc, char *argv[])
     if (tls1)
         meth = TLSv1_method();
     else
-        meth = SSLv23_method();
+        meth = TLS_method();
 
     c_ctx = SSL_CTX_new(meth);
     s_ctx = SSL_CTX_new(meth);
@@ -1437,7 +1391,8 @@ int main(int argc, char *argv[])
     }
     /*
      * Since we will use low security ciphersuites and keys for testing set
-     * security level to zero.
+     * security level to zero by default. Tests can override this by adding
+     * "@SECLEVEL=n" to the cipher string.
      */
     SSL_CTX_set_security_level(c_ctx, 0);
     SSL_CTX_set_security_level(s_ctx, 0);
@@ -1483,10 +1438,10 @@ int main(int argc, char *argv[])
              */
             SSL_CTX_set_options(s_ctx, SSL_OP_SINGLE_DH_USE);
             dh = get_dh1024dsa();
-        } else if (dhe1024)
-            dh = get_dh1024();
-        else
+        } else if (dhe512)
             dh = get_dh512();
+        else
+            dh = get_dh1024();
         SSL_CTX_set_tmp_dh(s_ctx, dh);
         DH_free(dh);
     }
@@ -1504,12 +1459,9 @@ int main(int argc, char *argv[])
                 BIO_printf(bio_err, "unknown curve name (%s)\n", named_curve);
                 goto end;
             }
-        } else
-# ifdef OPENSSL_NO_EC2M
+        } else {
             nid = NID_X9_62_prime256v1;
-# else
-            nid = NID_sect163r2;
-# endif
+        }
 
         ecdh = EC_KEY_new_by_curve_name(nid);
         if (ecdh == NULL) {
@@ -1528,26 +1480,6 @@ int main(int argc, char *argv[])
 #ifndef OPENSSL_NO_RSA
     SSL_CTX_set_tmp_rsa_callback(s_ctx, tmp_rsa_cb);
 #endif
-
-    if (!SSL_CTX_use_certificate_file(s_ctx, server_cert, SSL_FILETYPE_PEM)) {
-        ERR_print_errors(bio_err);
-    } else if (!SSL_CTX_use_PrivateKey_file(s_ctx,
-                                            (server_key ? server_key :
-                                             server_cert),
-                                            SSL_FILETYPE_PEM)) {
-        ERR_print_errors(bio_err);
-        goto end;
-    }
-
-    if (client_auth) {
-        if (!SSL_CTX_use_certificate_file(c_ctx, client_cert, SSL_FILETYPE_PEM)
-           || !SSL_CTX_use_PrivateKey_file(c_ctx,
-                                    (client_key ? client_key : client_cert),
-                                    SSL_FILETYPE_PEM)) {
-            ERR_print_errors(bio_err);
-            goto end;
-        }
-    }
 
     if ((!SSL_CTX_load_verify_locations(s_ctx, CAfile, CApath)) ||
         (!SSL_CTX_set_default_verify_paths(s_ctx)) ||
@@ -1728,21 +1660,6 @@ int main(int argc, char *argv[])
 
     c_ssl = SSL_new(c_ctx);
     s_ssl = SSL_new(s_ctx);
-
-#ifndef OPENSSL_NO_KRB5
-    if (c_ssl && c_ssl->kssl_ctx) {
-        char localhost[MAXHOSTNAMELEN + 2];
-
-        if (gethostname(localhost, sizeof localhost - 1) == 0) {
-            localhost[sizeof localhost - 1] = '\0';
-            if (strlen(localhost) == sizeof localhost - 1) {
-                BIO_printf(bio_err, "localhost name too long\n");
-                goto end;
-            }
-            kssl_ctx_setstring(c_ssl->kssl_ctx, KSSL_SERVER, localhost);
-        }
-    }
-#endif                          /* OPENSSL_NO_KRB5 */
 
     BIO_printf(bio_stdout, "Doing handshakes=%d bytes=%ld\n", number, bytes);
     for (i = 0; i < number; i++) {
@@ -2199,13 +2116,10 @@ int doit(SSL *s_ssl, SSL *c_ssl, long count)
 
     bufsiz = count > 40 * 1024 ? 40 * 1024 : count;
 
-    if ((cbuf = OPENSSL_malloc(bufsiz)) == NULL)
+    if ((cbuf = OPENSSL_zalloc(bufsiz)) == NULL)
         goto err;
-    if ((sbuf = OPENSSL_malloc(bufsiz)) == NULL)
+    if ((sbuf = OPENSSL_zalloc(bufsiz)) == NULL)
         goto err;
-
-    memset(cbuf, 0, bufsiz);
-    memset(sbuf, 0, bufsiz);
 
     c_to_s = BIO_new(BIO_s_mem());
     s_to_c = BIO_new(BIO_s_mem());
@@ -2457,11 +2371,8 @@ int doit(SSL *s_ssl, SSL *c_ssl, long count)
     BIO_free(s_to_c);
     BIO_free_all(c_bio);
     BIO_free_all(s_bio);
-
-    if (cbuf)
-        OPENSSL_free(cbuf);
-    if (sbuf)
-        OPENSSL_free(sbuf);
+    OPENSSL_free(cbuf);
+    OPENSSL_free(sbuf);
 
     return (ret);
 }
@@ -2511,7 +2422,7 @@ static int verify_callback(int ok, X509_STORE_CTX *ctx)
 
     if (ok == 1) {
         X509 *xs = ctx->current_cert;
-        if (xs->ex_flags & EXFLAG_PROXY) {
+        if (X509_get_extension_flags(xs) & EXFLAG_PROXY) {
             unsigned int *letters = X509_STORE_CTX_get_ex_data(ctx,
                                                                get_proxy_auth_ex_data_idx
                                                                ());
@@ -2939,8 +2850,7 @@ static RSA *tmp_rsa_cb(SSL *s, int is_export, int keylength)
  end:
         printf("\n");
     }
-    if (bn)
-        BN_free(bn);
+    BN_free(bn);
     return (rsa_tmp);
 }
 
@@ -3106,8 +3016,7 @@ static int psk_key2bn(const char *pskkey, unsigned char *psk,
     if (!ret) {
         BIO_printf(bio_err, "Could not convert PSK key '%s' to BIGNUM\n",
                    pskkey);
-        if (bn)
-            BN_free(bn);
+        BN_free(bn);
         return 0;
     }
     if (BN_num_bytes(bn) > (int)max_psk_len) {

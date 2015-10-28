@@ -120,10 +120,22 @@ void SSL3_BUFFER_set_data(SSL3_BUFFER *b, const unsigned char *d, int n)
     b->offset = 0;
 }
 
+/*
+ * Clear the contents of an SSL3_BUFFER but retain any memory allocated
+ */
+void SSL3_BUFFER_clear(SSL3_BUFFER *b)
+{
+    unsigned char *buf = b->buf;
+    size_t len = b->len;
+
+    memset(b, 0, sizeof(*b));
+    b->buf = buf;
+    b->len = len;
+}
+
 void SSL3_BUFFER_release(SSL3_BUFFER *b)
 {
-    if (b->buf != NULL)
-        OPENSSL_free(b->buf);
+    OPENSSL_free(b->buf);
     b->buf = NULL;
 }
 
@@ -135,7 +147,7 @@ int ssl3_setup_read_buffer(SSL *s)
     
     b = RECORD_LAYER_get_rbuf(&s->rlayer);
 
-    if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+    if (SSL_IS_DTLS(s))
         headerlen = DTLS1_RT_HEADER_LENGTH;
     else
         headerlen = SSL3_RT_HEADER_LENGTH;
@@ -177,7 +189,7 @@ int ssl3_setup_write_buffer(SSL *s)
 
     wb = RECORD_LAYER_get_wbuf(&s->rlayer);
 
-    if (SSL_version(s) == DTLS1_VERSION || SSL_version(s) == DTLS1_BAD_VER)
+    if (SSL_IS_DTLS(s))
         headerlen = DTLS1_RT_HEADER_LENGTH + 1;
     else
         headerlen = SSL3_RT_HEADER_LENGTH;
@@ -224,10 +236,8 @@ int ssl3_release_write_buffer(SSL *s)
 
     wb = RECORD_LAYER_get_wbuf(&s->rlayer);
 
-    if (wb->buf != NULL) {
-        OPENSSL_free(wb->buf);
-        wb->buf = NULL;
-    }
+    OPENSSL_free(wb->buf);
+    wb->buf = NULL;
     return 1;
 }
 
@@ -236,9 +246,7 @@ int ssl3_release_read_buffer(SSL *s)
     SSL3_BUFFER *b;
 
     b = RECORD_LAYER_get_rbuf(&s->rlayer);
-    if (b->buf != NULL) {
-        OPENSSL_free(b->buf);
-        b->buf = NULL;
-    }
+    OPENSSL_free(b->buf);
+    b->buf = NULL;
     return 1;
 }

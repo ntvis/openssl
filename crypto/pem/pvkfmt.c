@@ -61,7 +61,7 @@
  * and PRIVATEKEYBLOB).
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/bn.h>
@@ -285,8 +285,7 @@ static EVP_PKEY *do_b2i_bio(BIO *in, int ispub)
         ret = b2i_rsa(&p, length, bitlen, ispub);
 
  err:
-    if (buf)
-        OPENSSL_free(buf);
+    OPENSSL_free(buf);
     return ret;
 }
 
@@ -317,13 +316,12 @@ static EVP_PKEY *b2i_dss(const unsigned char **in, unsigned int length,
         if (!read_lebn(&p, 20, &dsa->priv_key))
             goto memerr;
         /* Calculate public key */
-        if (!(dsa->pub_key = BN_new()))
+        if ((dsa->pub_key = BN_new()) == NULL)
             goto memerr;
-        if (!(ctx = BN_CTX_new()))
+        if ((ctx = BN_CTX_new()) == NULL)
             goto memerr;
 
         if (!BN_mod_exp(dsa->pub_key, dsa->g, dsa->priv_key, dsa->p, ctx))
-
             goto memerr;
         BN_CTX_free(ctx);
     }
@@ -337,8 +335,7 @@ static EVP_PKEY *b2i_dss(const unsigned char **in, unsigned int length,
     PEMerr(PEM_F_B2I_DSS, ERR_R_MALLOC_FAILURE);
     DSA_free(dsa);
     EVP_PKEY_free(ret);
-    if (ctx)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     return NULL;
 }
 
@@ -620,13 +617,11 @@ static int do_PVK_header(const unsigned char **in, unsigned int length,
             PEMerr(PEM_F_DO_PVK_HEADER, PEM_R_PVK_TOO_SHORT);
             return 0;
         }
-        length -= 20;
     } else {
         if (length < 24) {
             PEMerr(PEM_F_DO_PVK_HEADER, PEM_R_PVK_TOO_SHORT);
             return 0;
         }
-        length -= 24;
         pvk_magic = read_ledword(&p);
         if (pvk_magic != MS_PVKMAGIC) {
             PEMerr(PEM_F_DO_PVK_HEADER, PEM_R_BAD_MAGIC_NUMBER);
@@ -676,6 +671,7 @@ static EVP_PKEY *do_PVK_body(const unsigned char **in,
     const unsigned char *p = *in;
     unsigned int magic;
     unsigned char *enctmp = NULL, *q;
+
     EVP_CIPHER_CTX cctx;
     EVP_CIPHER_CTX_init(&cctx);
     if (saltlen) {
@@ -688,23 +684,23 @@ static EVP_PKEY *do_PVK_body(const unsigned char **in,
             inlen = PEM_def_callback(psbuf, PEM_BUFSIZE, 0, u);
         if (inlen <= 0) {
             PEMerr(PEM_F_DO_PVK_BODY, PEM_R_BAD_PASSWORD_READ);
-            return NULL;
+            goto err;
         }
         enctmp = OPENSSL_malloc(keylen + 8);
         if (!enctmp) {
             PEMerr(PEM_F_DO_PVK_BODY, ERR_R_MALLOC_FAILURE);
-            return NULL;
+            goto err;
         }
         if (!derive_pvk_key(keybuf, p, saltlen,
                             (unsigned char *)psbuf, inlen))
-            return NULL;
+            goto err;
         p += saltlen;
         /* Copy BLOBHEADER across, decrypt rest */
         memcpy(enctmp, p, 8);
         p += 8;
         if (keylen < 8) {
             PEMerr(PEM_F_DO_PVK_BODY, PEM_R_PVK_TOO_SHORT);
-            return NULL;
+            goto err;
         }
         inlen = keylen - 8;
         q = enctmp + 8;
@@ -738,8 +734,7 @@ static EVP_PKEY *do_PVK_body(const unsigned char **in,
     ret = b2i_PrivateKey(&p, keylen);
  err:
     EVP_CIPHER_CTX_cleanup(&cctx);
-    if (enctmp && saltlen)
-        OPENSSL_free(enctmp);
+    OPENSSL_free(enctmp);
     return ret;
 }
 
@@ -772,10 +767,7 @@ EVP_PKEY *b2i_PVK_bio(BIO *in, pem_password_cb *cb, void *u)
     ret = do_PVK_body(&p, saltlen, keylen, cb, u);
 
  err:
-    if (buf) {
-        OPENSSL_cleanse(buf, buflen);
-        OPENSSL_free(buf);
-    }
+    OPENSSL_clear_free(buf, buflen);
     return ret;
 }
 

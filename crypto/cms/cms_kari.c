@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -62,11 +62,6 @@
 #include <openssl/aes.h>
 #include "cms_lcl.h"
 #include "internal/asn1_int.h"
-
-DECLARE_ASN1_ITEM(CMS_KeyAgreeRecipientInfo)
-DECLARE_ASN1_ITEM(CMS_RecipientEncryptedKey)
-DECLARE_ASN1_ITEM(CMS_OriginatorPublicKey)
-DECLARE_ASN1_ITEM(CMS_RecipientKeyIdentifier)
 
 /* Key Agreement Recipient Info (KARI) routines */
 
@@ -207,10 +202,9 @@ int CMS_RecipientInfo_kari_set0_pkey(CMS_RecipientInfo *ri, EVP_PKEY *pk)
 {
     EVP_PKEY_CTX *pctx;
     CMS_KeyAgreeRecipientInfo *kari = ri->d.kari;
-    if (kari->pctx) {
-        EVP_PKEY_CTX_free(kari->pctx);
-        kari->pctx = NULL;
-    }
+
+    EVP_PKEY_CTX_free(kari->pctx);
+    kari->pctx = NULL;
     if (!pk)
         return 1;
     pctx = EVP_PKEY_CTX_new(pk, NULL);
@@ -268,7 +262,7 @@ static int cms_kek_cipher(unsigned char **pout, size_t *poutlen,
 
  err:
     OPENSSL_cleanse(kek, keklen);
-    if (!rv && out)
+    if (!rv)
         OPENSSL_free(out);
     EVP_CIPHER_CTX_cleanup(&kari->ctx);
     EVP_PKEY_CTX_free(kari->pctx);
@@ -294,17 +288,13 @@ int CMS_RecipientInfo_kari_decrypt(CMS_ContentInfo *cms,
     if (!cms_kek_cipher(&cek, &ceklen, enckey, enckeylen, ri->d.kari, 0))
         goto err;
     ec = cms->d.envelopedData->encryptedContentInfo;
-    if (ec->key) {
-        OPENSSL_cleanse(ec->key, ec->keylen);
-        OPENSSL_free(ec->key);
-    }
+    OPENSSL_clear_free(ec->key, ec->keylen);
     ec->key = cek;
     ec->keylen = ceklen;
     cek = NULL;
     rv = 1;
  err:
-    if (cek)
-        OPENSSL_free(cek);
+    OPENSSL_free(cek);
     return rv;
 }
 

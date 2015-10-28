@@ -52,15 +52,13 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
 #include <openssl/err.h>
 #include <openssl/cms.h>
 #include "cms_lcl.h"
-
-DECLARE_ASN1_ITEM(CMS_DigestedData)
 
 /* CMS DigestedData Utilities */
 
@@ -88,10 +86,7 @@ CMS_ContentInfo *cms_DigestedData_create(const EVP_MD *md)
     return cms;
 
  err:
-
-    if (cms)
-        CMS_ContentInfo_free(cms);
-
+    CMS_ContentInfo_free(cms);
     return NULL;
 }
 

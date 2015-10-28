@@ -67,7 +67,7 @@
 #endif
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/dso.h>
 
 #ifndef DSO_DLFCN
@@ -182,8 +182,7 @@ static int dlfcn_load(DSO *dso)
     return (1);
  err:
     /* Cleanup! */
-    if (filename != NULL)
-        OPENSSL_free(filename);
+    OPENSSL_free(filename);
     if (ptr != NULL)
         dlclose(ptr);
     return (0);

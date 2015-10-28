@@ -55,7 +55,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/cmac.h>
 
 struct CMAC_CTX_st {
@@ -90,7 +90,8 @@ static void make_kn(unsigned char *k1, const unsigned char *l, int bl)
 CMAC_CTX *CMAC_CTX_new(void)
 {
     CMAC_CTX *ctx;
-    ctx = OPENSSL_malloc(sizeof(CMAC_CTX));
+
+    ctx = OPENSSL_malloc(sizeof(*ctx));
     if (!ctx)
         return NULL;
     EVP_CIPHER_CTX_init(&ctx->cctx);
@@ -115,6 +116,8 @@ EVP_CIPHER_CTX *CMAC_CTX_get0_cipher_ctx(CMAC_CTX *ctx)
 
 void CMAC_CTX_free(CMAC_CTX *ctx)
 {
+    if (!ctx)
+        return;
     CMAC_CTX_cleanup(ctx);
     OPENSSL_free(ctx);
 }

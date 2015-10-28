@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
         goto err;
     }
 
-    ctx = SSL_CTX_new(SSLv23_server_method());
+    ctx = SSL_CTX_new(TLS_server_method());
     cctx = SSL_CONF_CTX_new();
     SSL_CONF_CTX_set_flags(cctx, SSL_CONF_FLAG_SERVER);
     SSL_CONF_CTX_set_flags(cctx, SSL_CONF_FLAG_CERTIFICATE);
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
             ERR_print_errors_fp(stderr);
             goto err;
         }
-        if (!strcmp(cnf->name, "Port")) {
+        if (strcmp(cnf->name, "Port") == 0) {
             port = cnf->value;
         } else {
             fprintf(stderr, "Unknown configuration option %s\n", cnf->name);

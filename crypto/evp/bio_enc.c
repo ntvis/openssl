@@ -58,7 +58,7 @@
 
 #include <stdio.h>
 #include <errno.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/evp.h>
 
@@ -112,17 +112,13 @@ static int enc_new(BIO *bi)
 {
     BIO_ENC_CTX *ctx;
 
-    ctx = (BIO_ENC_CTX *)OPENSSL_malloc(sizeof(BIO_ENC_CTX));
+    ctx = OPENSSL_zalloc(sizeof(*ctx));
     if (ctx == NULL)
         return (0);
+
     EVP_CIPHER_CTX_init(&ctx->cipher);
-
-    ctx->buf_len = 0;
-    ctx->buf_off = 0;
     ctx->cont = 1;
-    ctx->finished = 0;
     ctx->ok = 1;
-
     bi->init = 0;
     bi->ptr = (char *)ctx;
     bi->flags = 0;
@@ -137,8 +133,7 @@ static int enc_free(BIO *a)
         return (0);
     b = (BIO_ENC_CTX *)a->ptr;
     EVP_CIPHER_CTX_cleanup(&(b->cipher));
-    OPENSSL_cleanse(a->ptr, sizeof(BIO_ENC_CTX));
-    OPENSSL_free(a->ptr);
+    OPENSSL_clear_free(a->ptr, sizeof(BIO_ENC_CTX));
     a->ptr = NULL;
     a->init = 0;
     a->flags = 0;

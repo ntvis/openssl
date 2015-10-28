@@ -14,7 +14,7 @@ use File::Spec::Functions;
 
 # see INSTALL for instructions.
 
-my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [experimental-<cipher> ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [no-asm] [no-dso] [no-krb5] [sctp] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] [--config=FILE] os/compiler[:flags]\n";
+my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [experimental-<cipher> ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]shared] [[no-]zlib|zlib-dynamic] [no-asm] [no-dso] [sctp] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--with-xxx[=vvv]] [--test-sanity] [--config=FILE] os/compiler[:flags]\n";
 
 # Options:
 #
@@ -29,18 +29,6 @@ my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [experimenta
 # --install_prefix  Additional prefix for package builders (empty by
 #               default).  This needn't be set in advance, you can
 #               just as well use "make INSTALL_PREFIX=/whatever install".
-#
-# --with-krb5-dir  Declare where Kerberos 5 lives.  The libraries are expected
-#		to live in the subdirectory lib/ and the header files in
-#		include/.  A value is required.
-# --with-krb5-lib  Declare where the Kerberos 5 libraries live.  A value is
-#		required.
-#		(Default: KRB5_DIR/lib)
-# --with-krb5-include  Declare where the Kerberos 5 header files live.  A
-#		value is required.
-#		(Default: KRB5_DIR/include)
-# --with-krb5-flavor  Declare what flavor of Kerberos 5 is used.  Currently
-#		supported values are "MIT" and "Heimdal".  A value is required.
 #
 # --test-sanity Make a number of sanity checks on the data in this file.
 #               This is a debugging tool for OpenSSL developers.
@@ -59,7 +47,6 @@ my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [experimenta
 # no-asm        do not use assembler
 # no-dso        do not compile in any native shared-library methods. This
 #               will ensure that all methods just return NULL.
-# no-krb5       do not compile in any KRB5 library or code.
 # [no-]zlib     [don't] compile support for zlib compression.
 # zlib-dynamic	Like "zlib", but the zlib library is expected to be a shared
 #		library and will be loaded in run-time by the OpenSSL library.
@@ -112,7 +99,14 @@ my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [experimenta
 
 my $gcc_devteam_warn = "-Wall -pedantic -DPEDANTIC -Wno-long-long -Wsign-compare -Wmissing-prototypes -Wshadow -Wformat -Wtype-limits -Werror -DCRYPTO_MDEBUG_ALL -DCRYPTO_MDEBUG_ABORT -DREF_CHECK -DDEBUG_UNUSED";
 
-my $clang_disabled_warnings = "-Wno-unused-parameter -Wno-missing-field-initializers -Wno-language-extension-token -Wno-extended-offsetof";
+# These are used in addition to $gcc_devteam_warn when the compiler is clang.
+# TODO(openssl-team): fix problems and investigate if (at least) the
+# following warnings can also be enabled:
+# -Wswitch-enum, -Wunused-macros, -Wmissing-field-initializers,
+# -Wcast-align,
+# -Wunreachable-code -Wunused-parameter -Wlanguage-extension-token
+# -Wextended-offsetof
+my $clang_devteam_warn = "-Wno-unused-parameter -Wno-missing-field-initializers -Wno-language-extension-token -Wno-extended-offsetof -Wconditional-uninitialized -Qunused-arguments -Wincompatible-pointer-types-discards-qualifiers -Wmissing-variable-declarations";
 
 my $strict_warnings = 0;
 
@@ -774,8 +768,7 @@ my $no_threads=0;
 my $threads=0;
 my $no_shared=0; # but "no-shared" is default
 my $zlib=1;      # but "no-zlib" is default
-my $no_krb5=0;   # but "no-krb5" is implied unless "--with-krb5-..." is used
-my $no_rfc3779=1; # but "no-rfc3779" is default
+my $no_rfc3779=0;
 my $no_asm=0;
 my $no_dso=0;
 my $no_gmp=0;
@@ -803,6 +796,86 @@ my $default_ranlib;
 my $perl;
 my $fips=0;
 
+# Explicitelly known options that are possible to disable.  They can
+# be regexps, and will be used like this: /^no-${option}$/
+# For developers: keep it sorted alphabetically
+
+my @disablables = (
+    "aes",
+    "asm",
+    "bf",
+    "camellia",
+    "capieng",
+    "cast",
+    "cmac",
+    "cms",
+    "comp",
+    "ct",
+    "deprecated",
+    "des",
+    "dgram",
+    "dh",
+    "dsa",
+    "dso",
+    "dtls1?",
+    "dynamic[-_]engine",
+    "ec",
+    "ec2m",
+    "ec_nistp_64_gcc_128",
+    "engine",
+    "err",			# Really???
+    "gmp",
+    "gost",
+    "heartbeats",
+    "hmac",
+    "hw(-.+)?",
+    "idea",
+    "jpake",
+    "locking",			# Really???
+    "md2",
+    "md4",
+    "md5",
+    "mdc2",
+    "md[-_]ghost94",
+    "nextprotoneg",
+    "ocb",
+    "ocsp",
+    "posix-io",
+    "psk",
+    "rc2",
+    "rc4",
+    "rc5",
+    "rdrand",
+    "rfc3779",
+    "rijndael",			# Old AES name
+    "rmd160",
+    "rsa",
+    "scrypt",
+    "sct",
+    "sctp",
+    "seed",
+    "sha",
+    "shared",
+    "sock",
+    "srp",
+    "srtp",
+    "sse2",
+    "ssl",
+    "ssl3",
+    "ssl3-method",
+    "ssl-trace",
+    "static-engine",
+    "stdio",
+    "store",
+    "threads",
+    "tls",
+    "tls1",
+    "unit-test",
+    "whirlpool",
+    "zlib",
+    "zlib-dynamic",
+    );
+
 # All of the following is disabled by default (RC5 was enabled before 0.9.8):
 
 my %disabled = ( # "what"         => "comment" [or special keyword "experimental"]
@@ -812,7 +885,6 @@ my %disabled = ( # "what"         => "comment" [or special keyword "experimental
 		 "jpake"          => "experimental",
 		 "md2"            => "default",
 		 "rc5"            => "default",
-		 "rfc3779"	  => "default",
 		 "sctp"       => "default",
 		 "shared"         => "default",
 		 "ssl-trace"	  => "default",
@@ -825,7 +897,7 @@ my @experimental = ();
 
 # This is what $depflags will look like with the above defaults
 # (we need this to see if we should advise the user to run "make depend"):
-my $default_depflags = " -DOPENSSL_NO_DEPRECATED -DOPENSSL_NO_EC_NISTP_64_GCC_128 -DOPENSSL_NO_GMP -DOPENSSL_NO_JPAKE -DOPENSSL_NO_MD2 -DOPENSSL_NO_RC5 -DOPENSSL_NO_RFC3779 -DOPENSSL_NO_SCTP -DOPENSSL_NO_SSL_TRACE -DOPENSSL_NO_STORE -DOPENSSL_NO_UNIT_TEST";
+my $default_depflags = " -DOPENSSL_NO_DEPRECATED -DOPENSSL_NO_EC_NISTP_64_GCC_128 -DOPENSSL_NO_GMP -DOPENSSL_NO_JPAKE -DOPENSSL_NO_MD2 -DOPENSSL_NO_RC5 -DOPENSSL_NO_SCTP -DOPENSSL_NO_SSL_TRACE -DOPENSSL_NO_STORE -DOPENSSL_NO_UNIT_TEST";
 
 # Explicit "no-..." options will be collected in %disabled along with the defaults.
 # To remove something from %disabled, use "enable-foo" (unless it's experimental).
@@ -848,7 +920,6 @@ my $openssl_thread_defines;
 my $openssl_sys_defines="";
 my $openssl_other_defines;
 my $libs;
-my $libkrb5="";
 my $target;
 my $options;
 my $make_depend=0;
@@ -876,6 +947,7 @@ while($argv_unprocessed)
 	$argvstring=join(' ',@argvcopy);
 
 PROCESS_ARGS:
+	my %unsupported_options = ();
 	foreach (@argvcopy)
 		{
 		s /^-no-/no-/; # some people just can't read the instructions
@@ -887,6 +959,15 @@ PROCESS_ARGS:
 		s /^zlib$/enable-zlib/;
 		s /^zlib-dynamic$/enable-zlib-dynamic/;
 
+		if (/^(no|disable|enable|experimental)-(.+)$/)
+			{
+			my $word = $2;
+			if (!grep { $word =~ /^${_}$/ } @disablables)
+				{
+				$unsupported_options{$_} = 1;
+				next;
+				}
+			}
 		if (/^no-(.+)$/ || /^disable-(.+)$/)
 			{
 			if (!($disabled{$1} eq "experimental"))
@@ -997,10 +1078,6 @@ PROCESS_ARGS:
 				{
 				$install_prefix=$1;
 				}
-			elsif (/^--with-krb5-(dir|lib|include|flavor)=(.*)$/)
-				{
-				$withargs{"krb5-".$1}=$2;
-				}
 			elsif (/^--with-zlib-lib=(.*)$/)
 				{
 				$withargs{"zlib-lib"}=$1;
@@ -1059,6 +1136,12 @@ PROCESS_ARGS:
 				{ $options .= " ".$_; }
 			}
 		}
+
+	if (keys %unsupported_options)
+		{
+		die "***** Unsupported options: ",
+			join(", ", keys %unsupported_options), "\n";
+		}
 	}
 
 
@@ -1066,11 +1149,6 @@ PROCESS_ARGS:
 if ($processor eq "386")
 	{
 	$disabled{"sse2"} = "forced";
-	}
-
-if (!defined($withargs{"krb5-flavor"}) || $withargs{"krb5-flavor"} eq "")
-	{
-	$disabled{"krb5"} = "krb5-flavor not specified";
 	}
 
 if (!defined($disabled{"zlib-dynamic"}))
@@ -1102,23 +1180,13 @@ if (defined($disabled{"md5"}) || defined($disabled{"sha"})
 	$disabled{"tls1"} = "forced";
 	}
 
-if (defined($disabled{"tls1"}))
-	{
-	$disabled{"tlsext"} = "forced";
-	}
 
 if (defined($disabled{"ec"}) || defined($disabled{"dsa"})
-    || defined($disabled{"dh"}))
+    || defined($disabled{"dh"}) || defined($disabled{"stdio"}))
 	{
 	$disabled{"gost"} = "forced";
 	}
 
-# SRP and HEARTBEATS require TLSEXT
-if (defined($disabled{"tlsext"}))
-	{
-	$disabled{"srp"} = "forced";
-	$disabled{"heartbeats"} = "forced";
-	}
 
 if ($target eq "TABLE") {
 	foreach $target (sort keys %table) {
@@ -1215,19 +1283,14 @@ foreach (sort (keys %disabled))
 			$openssl_algorithm_defines .= "#define OPENSSL_NO_$ALGO\n";
 			print " OPENSSL_NO_$ALGO";
 
-			if (/^krb5$/)
-				{ $no_krb5 = 1; }
-			else
-				{
-				push @skip, $algo;
-				# fix-up crypto/directory name(s)
-				$skip[$#skip]="whrlpool" if $algo eq "whirlpool";
-				$skip[$#skip]="ripemd" if $algo eq "rmd160";
+			push @skip, $algo;
+			# fix-up crypto/directory name(s)
+			$skip[$#skip]="whrlpool" if $algo eq "whirlpool";
+			$skip[$#skip]="ripemd" if $algo eq "rmd160";
 
-				print " (skip dir)";
+			print " (skip dir)";
 
-				$depflags .= " -DOPENSSL_NO_$ALGO";
-				}
+			$depflags .= " -DOPENSSL_NO_$ALGO";
 			}
 		}
 
@@ -1345,62 +1408,6 @@ my $no_user_cflags=0;
 
 if ($flags ne "")	{ $cflags="$flags$cflags"; }
 else			{ $no_user_cflags=1;       }
-
-# Kerberos settings.  The flavor must be provided from outside, either through
-# the script "config" or manually.
-if (!$no_krb5)
-	{
-	my ($lresolv, $lpath, $lext);
-	if ($withargs{"krb5-flavor"} =~ /^[Hh]eimdal$/)
-		{
-		die "Sorry, Heimdal is currently not supported\n";
-		}
-	##### HACK to force use of Heimdal.
-	##### WARNING: Since we don't really have adequate support for Heimdal,
-	#####          using this will break the build.  You'll have to make
-	#####          changes to the source, and if you do, please send
-	#####          patches to openssl-dev@openssl.org
-	if ($withargs{"krb5-flavor"} =~ /^force-[Hh]eimdal$/)
-		{
-		warn "Heimdal isn't really supported.  Your build WILL break\n";
-		warn "If you fix the problems, please send a patch to openssl-dev\@openssl.org\n";
-		$withargs{"krb5-dir"} = "/usr/heimdal"
-			if $withargs{"krb5-dir"} eq "";
-		$withargs{"krb5-lib"} = "-L".$withargs{"krb5-dir"}.
-			"/lib -lgssapi -lkrb5 -lcom_err"
-			if $withargs{"krb5-lib"} eq "" && !$IsMK1MF;
-		$cflags="-DKRB5_HEIMDAL $cflags";
-		}
-	if ($withargs{"krb5-flavor"} =~ /^[Mm][Ii][Tt]/)
-		{
-		$withargs{"krb5-dir"} = "/usr/kerberos"
-			if $withargs{"krb5-dir"} eq "";
-		$withargs{"krb5-lib"} = "-L".$withargs{"krb5-dir"}.
-			"/lib -lgssapi_krb5 -lkrb5 -lcom_err -lk5crypto"
-			if $withargs{"krb5-lib"} eq "" && !$IsMK1MF;
-		$cflags="-DKRB5_MIT $cflags";
-		$withargs{"krb5-flavor"} =~ s/^[Mm][Ii][Tt][._-]*//;
-		if ($withargs{"krb5-flavor"} =~ /^1[._-]*[01]/)
-			{
-			$cflags="-DKRB5_MIT_OLD11 $cflags";
-			}
-		}
-	LRESOLV:
-	foreach $lpath ("/lib", "/usr/lib")
-		{
-		foreach $lext ("a", "so")
-			{
-			$lresolv = "$lpath/libresolv.$lext";
-			last LRESOLV	if (-r "$lresolv");
-			$lresolv = "";
-			}
-		}
-	$withargs{"krb5-lib"} .= " -lresolv"
-		if ("$lresolv" ne "");
-	$withargs{"krb5-include"} = "-I".$withargs{"krb5-dir"}."/include"
-		if $withargs{"krb5-include"} eq "" &&
-		   $withargs{"krb5-dir"} ne "";
-	}
 
 # The DSO code currently always implements all functions so that no
 # applications will have to worry about that from a compilation point
@@ -1724,13 +1731,23 @@ if ($shlib_version_number =~ /(^[0-9]*)\.([0-9\.]*)/)
 	$shlib_minor=$2;
 	}
 
+my $ecc = $cc;
+$ecc = "clang" if `$cc --version 2>&1` =~ /clang/;
+
 if ($strict_warnings)
 	{
 	my $wopt;
-	die "ERROR --strict-warnings requires gcc or clang" unless ($cc =~ /gcc$/ or $cc =~ /clang$/);
+	die "ERROR --strict-warnings requires gcc or clang" unless ($ecc =~ /gcc(-\d(\.\d)*)?$/ or $ecc =~ /clang$/);
 	foreach $wopt (split /\s+/, $gcc_devteam_warn)
 		{
 		$cflags .= " $wopt" unless ($cflags =~ /$wopt/)
+		}
+	if ($ecc eq "clang")
+		{
+		foreach $wopt (split /\s+/, $clang_devteam_warn)
+			{
+			$cflags .= " $wopt" unless ($cflags =~ /$wopt/)
+			}
 		}
 	}
 
@@ -1783,7 +1800,7 @@ while (<IN>)
 		s/^CC=.*$/CC= $cc/;
 		s/^AR=\s*ar/AR= $ar/;
 		s/^RANLIB=.*/RANLIB= $ranlib/;
-		s/^MAKEDEPPROG=.*$/MAKEDEPPROG= $cc/ if $cc eq "gcc" || ($cc eq 'cc' && $target =~ /darwin/);
+		s/^MAKEDEPPROG=.*$/MAKEDEPPROG= $cc/ if $ecc eq "gcc" || $ecc eq "clang";
 		}
 	s/^CFLAG=.*$/CFLAG= $cflags/;
 	s/^DEPFLAG=.*$/DEPFLAG=$depflags/;
@@ -1810,8 +1827,6 @@ while (<IN>)
 	s/^PROCESSOR=.*/PROCESSOR= $processor/;
 	s/^ARFLAGS=.*/ARFLAGS= $arflags/;
 	s/^PERL=.*/PERL= $perl/;
-	s/^KRB5_INCLUDES=.*/KRB5_INCLUDES=$withargs{"krb5-include"}/;
-	s/^LIBKRB5=.*/LIBKRB5=$withargs{"krb5-lib"}/;
 	s/^LIBZLIB=.*/LIBZLIB=$withargs{"zlib-lib"}/;
 	s/^ZLIB_INCLUDE=.*/ZLIB_INCLUDE=$withargs{"zlib-include"}/;
 	s/^FIPSLIBDIR=.*/FIPSLIBDIR=$fipslibdir/;
@@ -1870,8 +1885,6 @@ print "PROCESSOR     =$processor\n";
 print "RANLIB        =$ranlib\n";
 print "ARFLAGS       =$arflags\n";
 print "PERL          =$perl\n";
-print "KRB5_INCLUDES =",$withargs{"krb5-include"},"\n"
-	if $withargs{"krb5-include"} ne "";
 
 my $des_ptr=0;
 my $des_risc1=0;
@@ -2066,6 +2079,16 @@ print "RC2 uses u$type[$rc2_int]\n" if $rc2_int != $def_int;
 print "BF_PTR used\n" if $bf_ptr == 1;
 print "BF_PTR2 used\n" if $bf_ptr == 2;
 
+{
+    my $perlguess = $perl =~ m@^/@ ? $perl : '/usr/local/bin/perl';
+
+    &dofile("tools/c_rehash",$perlguess,
+	    '^#!/'		=> '#!%s',
+	    '^my \$dir;$'	=> 'my $dir = "' . $openssldir . '";',
+	    '^my \$prefix;$'	=> 'my $prefix = "' . $prefix . '";');
+    &dofile("apps/CA.pl",$perl,
+	    '^#!/'		=> '#!%s');
+}
 if($IsMK1MF) {
 	open (OUT,">crypto/buildinf.h") || die "Can't open buildinf.h";
 	printf OUT <<EOF;
@@ -2084,14 +2107,6 @@ EOF
 	$make_targets .= " depend" if $depflags ne $default_depflags && $make_depend;
 	(system $make_command.$make_targets) == 0 or die "make $make_targets failed"
 		if $make_targets ne "";
-	if ( $perl =~ m@^/@) {
-	    &dofile("tools/c_rehash",$perl,'^#!/', '#!%s','^my \$dir;$', 'my $dir = "' . $openssldir . '";', '^my \$prefix;$', 'my $prefix = "' . $prefix . '";');
-	    &dofile("apps/CA.pl",$perl,'^#!/', '#!%s');
-	} else {
-	    # No path for Perl known ...
-	    &dofile("tools/c_rehash",'/usr/local/bin/perl','^#!/', '#!%s','^my \$dir;$', 'my $dir = "' . $openssldir . '";',  '^my \$prefix;$', 'my $prefix = "' . $prefix . '";');
-	    &dofile("apps/CA.pl",'/usr/local/bin/perl','^#!/', '#!%s');
-	}
 	if ($depflags ne $default_depflags && !$make_depend) {
 		print <<EOF;
 
@@ -2150,7 +2165,7 @@ BEGIN
 	    VALUE "ProductVersion", "$version\\0"
 	    // Optional:
 	    //VALUE "Comments", "\\0"
-	    VALUE "LegalCopyright", "Copyright © 1998-2005 The OpenSSL Project. Copyright © 1995-1998 Eric A. Young, Tim J. Hudson. All rights reserved.\\0"
+	    VALUE "LegalCopyright", "Copyright © 1998-2015 The OpenSSL Project. Copyright © 1995-1998 Eric A. Young, Tim J. Hudson. All rights reserved.\\0"
 	    //VALUE "LegalTrademarks", "\\0"
 	    //VALUE "PrivateBuild", "\\0"
 	    //VALUE "SpecialBuild", "\\0"

@@ -59,7 +59,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #ifndef NO_SYS_TYPES_H
 # include <sys/types.h>
@@ -107,8 +107,7 @@ int ASN1_verify(i2d_of_void *i2d, X509_ALGOR *a, ASN1_BIT_STRING *signature,
     ret = EVP_VerifyInit_ex(&ctx, type, NULL)
         && EVP_VerifyUpdate(&ctx, (unsigned char *)buf_in, inl);
 
-    OPENSSL_cleanse(buf_in, (unsigned int)inl);
-    OPENSSL_free(buf_in);
+    OPENSSL_clear_free(buf_in, (unsigned int)inl);
 
     if (!ret) {
         ASN1err(ASN1_F_ASN1_VERIFY, ERR_R_EVP_LIB);
@@ -122,11 +121,6 @@ int ASN1_verify(i2d_of_void *i2d, X509_ALGOR *a, ASN1_BIT_STRING *signature,
         ret = 0;
         goto err;
     }
-    /*
-     * we don't need to zero the 'ctx' because we just checked public
-     * information
-     */
-    /* memset(&ctx,0,sizeof(ctx)); */
     ret = 1;
  err:
     EVP_MD_CTX_cleanup(&ctx);
@@ -208,8 +202,7 @@ int ASN1_item_verify(const ASN1_ITEM *it, X509_ALGOR *a,
 
     ret = EVP_DigestVerifyUpdate(&ctx, buf_in, inl);
 
-    OPENSSL_cleanse(buf_in, (unsigned int)inl);
-    OPENSSL_free(buf_in);
+    OPENSSL_clear_free(buf_in, (unsigned int)inl);
 
     if (!ret) {
         ASN1err(ASN1_F_ASN1_ITEM_VERIFY, ERR_R_EVP_LIB);
@@ -223,11 +216,6 @@ int ASN1_item_verify(const ASN1_ITEM *it, X509_ALGOR *a,
         ret = 0;
         goto err;
     }
-    /*
-     * we don't need to zero the 'ctx' because we just checked public
-     * information
-     */
-    /* memset(&ctx,0,sizeof(ctx)); */
     ret = 1;
  err:
     EVP_MD_CTX_cleanup(&ctx);

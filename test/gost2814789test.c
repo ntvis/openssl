@@ -8,6 +8,7 @@
  * ====================================================================
  */
 #include <stdio.h>
+#include <openssl/e_os2.h>
 
 #if defined(OPENSSL_NO_ENGINE) || defined(OPENSSL_NO_GOST)
 int main(int argc, char *argv[])
@@ -26,6 +27,7 @@ int main(int argc, char *argv[])
 # include <openssl/evp.h>
 # include <openssl/hmac.h>
 # include <openssl/obj_mac.h>
+# include "e_os.h"
 
 # define CCGOST_ID "gost"
 
@@ -77,7 +79,7 @@ typedef struct g89_tc_ {
      */
 } g89_tc;
 
-const g89_tc tcs[] = {
+static const g89_tc tcs[] = {
     /*
      * GOST R 34.11-94 Test cases
      */
@@ -1311,7 +1313,7 @@ int main(int argc, char *argv[])
     }
 
     /* Test cases */
-    for (t = 0; t < sizeof(tcs) / sizeof(tcs[0]); t++) {
+    for (t = 0; t < OSSL_NELEM(tcs); t++) {
         if (NULL == tcs[t].szDerive) {
             continue;
         }
@@ -1409,6 +1411,7 @@ int main(int argc, char *argv[])
             }
             siglen = 4;
             OPENSSL_assert(EVP_DigestSignFinal(&mctx, bTest, &siglen));
+            EVP_PKEY_free(mac_key);
             EVP_MD_CTX_cleanup(&mctx);
             enlu = (int)tcs[t].ullLen;
             enlf = 0;
@@ -1431,6 +1434,8 @@ int main(int argc, char *argv[])
 
     printf(" passed\n");
     fflush(NULL);
+
+    NCONF_free(pConfig);
 
     return EXIT_SUCCESS;
 }

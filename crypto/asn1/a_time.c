@@ -63,7 +63,7 @@
 
 #include <stdio.h>
 #include <time.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include "asn1_locl.h"
 
@@ -116,8 +116,8 @@ ASN1_GENERALIZEDTIME *ASN1_TIME_to_generalizedtime(ASN1_TIME *t,
     if (!ASN1_TIME_check(t))
         return NULL;
 
-    if (!out || !*out) {
-        if (!(ret = ASN1_GENERALIZEDTIME_new()))
+    if (out == NULL || *out == NULL) {
+        if ((ret = ASN1_GENERALIZEDTIME_new()) == NULL)
             return NULL;
         if (out)
             *out = ret;
@@ -197,4 +197,14 @@ int ASN1_TIME_diff(int *pday, int *psec,
     if (!asn1_time_to_tm(&tm_to, to))
         return 0;
     return OPENSSL_gmtime_diff(pday, psec, &tm_from, &tm_to);
+}
+
+int ASN1_TIME_print(BIO *bp, const ASN1_TIME *tm)
+{
+    if (tm->type == V_ASN1_UTCTIME)
+        return ASN1_UTCTIME_print(bp, tm);
+    if (tm->type == V_ASN1_GENERALIZEDTIME)
+        return ASN1_GENERALIZEDTIME_print(bp, tm);
+    BIO_write(bp, "Bad time value", 14);
+    return (0);
 }

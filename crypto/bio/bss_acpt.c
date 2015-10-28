@@ -59,7 +59,7 @@
 #include <stdio.h>
 #include <errno.h>
 #define USE_SOCKETS
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 
 #ifndef OPENSSL_NO_SOCK
@@ -123,7 +123,7 @@ static int acpt_new(BIO *bi)
     BIO_ACCEPT *ba;
 
     bi->init = 0;
-    bi->num = INVALID_SOCKET;
+    bi->num = (int)INVALID_SOCKET;
     bi->flags = 0;
     if ((ba = BIO_ACCEPT_new()) == NULL)
         return (0);
@@ -137,11 +137,9 @@ static BIO_ACCEPT *BIO_ACCEPT_new(void)
 {
     BIO_ACCEPT *ret;
 
-    if ((ret = (BIO_ACCEPT *)OPENSSL_malloc(sizeof(BIO_ACCEPT))) == NULL)
+    if ((ret = OPENSSL_zalloc(sizeof(*ret))) == NULL)
         return (NULL);
-
-    memset(ret, 0, sizeof(BIO_ACCEPT));
-    ret->accept_sock = INVALID_SOCKET;
+    ret->accept_sock = (int)INVALID_SOCKET;
     ret->bind_mode = BIO_BIND_NORMAL;
     return (ret);
 }
@@ -151,10 +149,8 @@ static void BIO_ACCEPT_free(BIO_ACCEPT *a)
     if (a == NULL)
         return;
 
-    if (a->param_addr != NULL)
-        OPENSSL_free(a->param_addr);
-    if (a->addr != NULL)
-        OPENSSL_free(a->addr);
+    OPENSSL_free(a->param_addr);
+    OPENSSL_free(a->addr);
     BIO_free(a->bio_chain);
     OPENSSL_free(a);
 }
@@ -164,11 +160,11 @@ static void acpt_close_socket(BIO *bio)
     BIO_ACCEPT *c;
 
     c = (BIO_ACCEPT *)bio->ptr;
-    if (c->accept_sock != INVALID_SOCKET) {
+    if (c->accept_sock != (int)INVALID_SOCKET) {
         shutdown(c->accept_sock, 2);
         closesocket(c->accept_sock);
-        c->accept_sock = INVALID_SOCKET;
-        bio->num = INVALID_SOCKET;
+        c->accept_sock = (int)INVALID_SOCKET;
+        bio->num = (int)INVALID_SOCKET;
     }
 }
 
@@ -204,7 +200,7 @@ static int acpt_state(BIO *b, BIO_ACCEPT *c)
             return (-1);
         }
         s = BIO_get_accept_socket(c->param_addr, c->bind_mode);
-        if (s == INVALID_SOCKET)
+        if (s == (int)INVALID_SOCKET)
             return (-1);
 
         if (c->accept_nbio) {
@@ -353,8 +349,7 @@ static long acpt_ctrl(BIO *b, int cmd, long num, void *ptr)
         if (ptr != NULL) {
             if (num == 0) {
                 b->init = 1;
-                if (data->param_addr != NULL)
-                    OPENSSL_free(data->param_addr);
+                OPENSSL_free(data->param_addr);
                 data->param_addr = BUF_strdup(ptr);
             } else if (num == 1) {
                 data->accept_nbio = (ptr != NULL);

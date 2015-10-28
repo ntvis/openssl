@@ -58,7 +58,7 @@
  *
  */
 #ifndef OPENSSL_NO_SRP
-# include "cryptlib.h"
+# include "internal/cryptlib.h"
 # include <openssl/sha.h>
 # include <openssl/srp.h>
 # include <openssl/evp.h>
@@ -127,7 +127,7 @@ BIGNUM *SRP_Calc_u(BIGNUM *A, BIGNUM *B, BIGNUM *N)
     EVP_DigestFinal_ex(&ctxt, cu, NULL);
     EVP_MD_CTX_cleanup(&ctxt);
 
-    if (!(u = BN_bin2bn(cu, sizeof(cu), NULL)))
+    if ((u = BN_bin2bn(cu, sizeof(cu), NULL)) == NULL)
         return NULL;
     if (!BN_is_zero(u))
         return u;
@@ -178,10 +178,10 @@ BIGNUM *SRP_Calc_B(BIGNUM *b, BIGNUM *N, BIGNUM *g, BIGNUM *v)
 
     /* B = g**b + k*v */
 
-    if (!BN_mod_exp(gb, g, b, N, bn_ctx) ||
-        !(k = srp_Calc_k(N, g)) ||
-        !BN_mod_mul(kv, v, k, N, bn_ctx) ||
-        !BN_mod_add(B, gb, kv, N, bn_ctx)) {
+    if (!BN_mod_exp(gb, g, b, N, bn_ctx)
+        || (k = srp_Calc_k(N, g)) == NULL
+        || !BN_mod_mul(kv, v, k, N, bn_ctx)
+        || !BN_mod_add(B, gb, kv, N, bn_ctx)) {
         BN_free(B);
         B = NULL;
     }
@@ -228,8 +228,7 @@ BIGNUM *SRP_Calc_A(BIGNUM *a, BIGNUM *N, BIGNUM *g)
     BN_CTX *bn_ctx;
     BIGNUM *A = NULL;
 
-    if (a == NULL || N == NULL || g == NULL ||
-        (bn_ctx = BN_CTX_new()) == NULL)
+    if (a == NULL || N == NULL || g == NULL || (bn_ctx = BN_CTX_new()) == NULL)
         return NULL;
 
     if ((A = BN_new()) != NULL && !BN_mod_exp(A, g, a, N, bn_ctx)) {
@@ -252,18 +251,18 @@ BIGNUM *SRP_Calc_client_key(BIGNUM *N, BIGNUM *B, BIGNUM *g, BIGNUM *x,
 
     if ((tmp = BN_new()) == NULL ||
         (tmp2 = BN_new()) == NULL ||
-        (tmp3 = BN_new()) == NULL || (K = BN_new()) == NULL)
+        (tmp3 = BN_new()) == NULL ||
+        (K = BN_new()) == NULL)
         goto err;
 
     if (!BN_mod_exp(tmp, g, x, N, bn_ctx))
         goto err;
-    if (!(k = srp_Calc_k(N, g)))
+    if ((k = srp_Calc_k(N, g)) == NULL)
         goto err;
     if (!BN_mod_mul(tmp2, tmp, k, N, bn_ctx))
         goto err;
     if (!BN_mod_sub(tmp, B, tmp2, N, bn_ctx))
         goto err;
-
     if (!BN_mod_mul(tmp3, u, x, N, bn_ctx))
         goto err;
     if (!BN_mod_add(tmp2, a, tmp3, N, bn_ctx))
@@ -306,6 +305,18 @@ int SRP_Verify_A_mod_N(BIGNUM *A, BIGNUM *N)
     /* Checks if A % N == 0 */
     return SRP_Verify_B_mod_N(A, N);
 }
+
+static SRP_gN knowngN[] = {
+    {"8192", (BIGNUM *)&bn_generator_19, (BIGNUM *)&bn_group_8192},
+    {"6144", (BIGNUM *)&bn_generator_5, (BIGNUM *)&bn_group_6144},
+    {"4096", (BIGNUM *)&bn_generator_5, (BIGNUM *)&bn_group_4096},
+    {"3072", (BIGNUM *)&bn_generator_5, (BIGNUM *)&bn_group_3072},
+    {"2048", (BIGNUM *)&bn_generator_2, (BIGNUM *)&bn_group_2048},
+    {"1536", (BIGNUM *)&bn_generator_2, (BIGNUM *)&bn_group_1536},
+    {"1024", (BIGNUM *)&bn_generator_2, (BIGNUM *)&bn_group_1024},
+};
+
+# define KNOWN_GN_NUMBER sizeof(knowngN) / sizeof(SRP_gN)
 
 /*
  * Check if G and N are kwown parameters. The values have been generated

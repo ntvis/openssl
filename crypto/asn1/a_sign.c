@@ -112,7 +112,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #ifndef NO_SYS_TYPES_H
 # include <sys/types.h>
@@ -171,9 +171,9 @@ int ASN1_sign(i2d_of_void *i2d, X509_ALGOR *algor1, X509_ALGOR *algor2,
         }
     }
     inl = i2d(data, NULL);
-    buf_in = (unsigned char *)OPENSSL_malloc((unsigned int)inl);
+    buf_in = OPENSSL_malloc((unsigned int)inl);
     outll = outl = EVP_PKEY_size(pkey);
-    buf_out = (unsigned char *)OPENSSL_malloc((unsigned int)outl);
+    buf_out = OPENSSL_malloc((unsigned int)outl);
     if ((buf_in == NULL) || (buf_out == NULL)) {
         outl = 0;
         ASN1err(ASN1_F_ASN1_SIGN, ERR_R_MALLOC_FAILURE);
@@ -190,8 +190,7 @@ int ASN1_sign(i2d_of_void *i2d, X509_ALGOR *algor1, X509_ALGOR *algor2,
         ASN1err(ASN1_F_ASN1_SIGN, ERR_R_EVP_LIB);
         goto err;
     }
-    if (signature->data != NULL)
-        OPENSSL_free(signature->data);
+    OPENSSL_free(signature->data);
     signature->data = buf_out;
     buf_out = NULL;
     signature->length = outl;
@@ -203,14 +202,8 @@ int ASN1_sign(i2d_of_void *i2d, X509_ALGOR *algor1, X509_ALGOR *algor2,
     signature->flags |= ASN1_STRING_FLAG_BITS_LEFT;
  err:
     EVP_MD_CTX_cleanup(&ctx);
-    if (buf_in != NULL) {
-        OPENSSL_cleanse((char *)buf_in, (unsigned int)inl);
-        OPENSSL_free(buf_in);
-    }
-    if (buf_out != NULL) {
-        OPENSSL_cleanse((char *)buf_out, outll);
-        OPENSSL_free(buf_out);
-    }
+    OPENSSL_clear_free((char *)buf_in, (unsigned int)inl);
+    OPENSSL_clear_free((char *)buf_out, outll);
     return (outl);
 }
 
@@ -306,8 +299,7 @@ int ASN1_item_sign_ctx(const ASN1_ITEM *it,
         ASN1err(ASN1_F_ASN1_ITEM_SIGN_CTX, ERR_R_EVP_LIB);
         goto err;
     }
-    if (signature->data != NULL)
-        OPENSSL_free(signature->data);
+    OPENSSL_free(signature->data);
     signature->data = buf_out;
     buf_out = NULL;
     signature->length = outl;
@@ -319,13 +311,7 @@ int ASN1_item_sign_ctx(const ASN1_ITEM *it,
     signature->flags |= ASN1_STRING_FLAG_BITS_LEFT;
  err:
     EVP_MD_CTX_cleanup(ctx);
-    if (buf_in != NULL) {
-        OPENSSL_cleanse((char *)buf_in, (unsigned int)inl);
-        OPENSSL_free(buf_in);
-    }
-    if (buf_out != NULL) {
-        OPENSSL_cleanse((char *)buf_out, outll);
-        OPENSSL_free(buf_out);
-    }
+    OPENSSL_clear_free((char *)buf_in, (unsigned int)inl);
+    OPENSSL_clear_free((char *)buf_out, outll);
     return (outl);
 }

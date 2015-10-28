@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/err.h>
 #include <openssl/objects.h>
@@ -185,7 +185,7 @@ EVP_PKEY *EVP_PKEY_new(void)
 {
     EVP_PKEY *ret;
 
-    ret = (EVP_PKEY *)OPENSSL_malloc(sizeof(EVP_PKEY));
+    ret = OPENSSL_malloc(sizeof(*ret));
     if (ret == NULL) {
         EVPerr(EVP_F_EVP_PKEY_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
@@ -261,7 +261,7 @@ int EVP_PKEY_set_type_str(EVP_PKEY *pkey, const char *str, int len)
 
 int EVP_PKEY_assign(EVP_PKEY *pkey, int type, void *key)
 {
-    if (!EVP_PKEY_set_type(pkey, type))
+    if (pkey == NULL || !EVP_PKEY_set_type(pkey, type))
         return 0;
     pkey->pkey.ptr = key;
     return (key != NULL);
@@ -401,8 +401,7 @@ void EVP_PKEY_free(EVP_PKEY *x)
     }
 #endif
     EVP_PKEY_free_it(x);
-    if (x->attributes)
-        sk_X509_ATTRIBUTE_pop_free(x->attributes, X509_ATTRIBUTE_free);
+    sk_X509_ATTRIBUTE_pop_free(x->attributes, X509_ATTRIBUTE_free);
     OPENSSL_free(x);
 }
 

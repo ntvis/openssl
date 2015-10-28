@@ -70,7 +70,7 @@
 #include <string.h>
 #include <limits.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #include "ech_locl.h"
 #include <openssl/err.h>
@@ -205,9 +205,7 @@ static int ecdh_compute_key(void *out, size_t outlen, const EC_POINT *pub_key,
     EC_POINT_free(tmp);
     if (ctx)
         BN_CTX_end(ctx);
-    if (ctx)
-        BN_CTX_free(ctx);
-    if (buf)
-        OPENSSL_free(buf);
+    BN_CTX_free(ctx);
+    OPENSSL_free(buf);
     return (ret);
 }

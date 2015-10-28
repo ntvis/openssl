@@ -195,6 +195,12 @@ context. This option is only supported if certificate operations
 are permitted. Note: if no B<PrivateKey> option is set then a private key is
 not loaded unless the B<SSL_CONF_FLAG_REQUIRE_PRIVATE> is set.
 
+=item B<ChainCAFile>, B<ChainCAPath>, B<VerifyCAFile>, B<VerifyCAPath>
+
+These options indicate a file or directory used for building certificate
+chains or verifying certificate chains. These options are only supported
+if certificate operations are permitted.
+
 =item B<ServerInfoFile>
 
 Attempts to use the file B<value> in the "serverinfo" extension using the
@@ -306,6 +312,27 @@ B<UnsafeLegacyServerConnect> permits the use of unsafe legacy renegotiation
 for OpenSSL clients only. Equivalent to B<SSL_OP_LEGACY_SERVER_CONNECT>.
 Set by default.
 
+=item B<VerifyMode>
+
+The B<value> argument is a comma separated list of flags to set.
+
+B<Peer> enables peer verification: for clients only.
+
+B<Request> requests but does not require a certificate from the client.
+Servers only.
+
+B<Require> requests and requires a certificate from the client: an error
+occurs if the client does not present a certificate. Servers only.
+
+B<Once> requests a certificate from a client only on the initial connection:
+not when renegotiating. Servers only.
+
+=item B<ClientCAFile>, B<ClientCAPath>
+
+A file or directory of certificates in PEM format whose names are used as the
+set of acceptable names for client CAs. Servers only. This option is only
+supported if certificate operations are permitted.
+
 =back
 
 =head1 SUPPORTED COMMAND TYPES
@@ -331,6 +358,11 @@ The value is a file name.
 =item B<SSL_CONF_TYPE_DIR>
 
 The value is a directory name.
+
+=item B<SSL_CONF_TYPE_NONE>
+
+The value string is not used e.g. a command line option which doesn't take an
+argument.
 
 =back
 
@@ -425,11 +457,11 @@ SSL_CONF_finish() returns 1 for success and 0 for failure.
 
 =head1 SEE ALSO
 
-L<SSL_CONF_CTX_new(3)|SSL_CONF_CTX_new(3)>,
-L<SSL_CONF_CTX_set_flags(3)|SSL_CONF_CTX_set_flags(3)>,
-L<SSL_CONF_CTX_set1_prefix(3)|SSL_CONF_CTX_set1_prefix(3)>,
-L<SSL_CONF_CTX_set_ssl_ctx(3)|SSL_CONF_CTX_set_ssl_ctx(3)>,
-L<SSL_CONF_cmd_argv(3)|SSL_CONF_cmd_argv(3)>
+L<SSL_CONF_CTX_new(3)>,
+L<SSL_CONF_CTX_set_flags(3)>,
+L<SSL_CONF_CTX_set1_prefix(3)>,
+L<SSL_CONF_CTX_set_ssl_ctx(3)>,
+L<SSL_CONF_cmd_argv(3)>
 
 =head1 HISTORY
 
@@ -437,5 +469,9 @@ SSL_CONF_cmd() was first added to OpenSSL 1.0.2
 
 B<SSL_OP_NO_SSL2> doesn't have effect anymore since 1.1.0 but the define is kept
 for backward compatibility.
+
+B<SSL_CONF_TYPE_NONE> was first added to OpenSSL 1.1.0. In earlier versions of
+OpenSSL passing a command which didn't take an argument would return
+B<SSL_CONF_TYPE_UNKNOWN>.
 
 =cut

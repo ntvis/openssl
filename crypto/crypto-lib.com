@@ -127,7 +127,7 @@ $   ENCRYPT_TYPES = "Basic,"+ -
 		    "DES,AES,RC2,RC4,RC5,IDEA,BF,CAST,CAMELLIA,SEED,MODES,"+ -
 		    "BN,EC,RSA,DSA,ECDSA,DH,ECDH,DSO,ENGINE,"+ -
 		    "BUFFER,BIO,STACK,LHASH,RAND,ERR,"+ -
-		    "EVP,ASN1,PEM,X509,X509V3,CONF,TXT_DB,PKCS7,PKCS12,COMP,OCSP,UI,KRB5,"+ -
+		    "EVP,ASN1,PEM,X509,X509V3,CONF,TXT_DB,PKCS7,PKCS12,COMP,OCSP,UI,"+ -
 		    "CMS,PQUEUE,TS,JPAKE,SRP,STORE,CMAC"
 $ ENDIF
 $!
@@ -308,7 +308,7 @@ $ LIB_ASN1_1 = "a_object,a_bitstr,a_utctm,a_gentm,a_time,a_int,a_octet,"+ -
 	"a_enum,a_utf8,a_sign,a_digest,a_verify,a_mbstr,a_strex,"+ -
 	"x_algor,x_val,x_pubkey,x_sig,x_req,x_attrib,x_bignum,"+ -
 	"x_long,x_name,x_x509,x_x509a,x_crl,x_info,x_spki,nsseq,"+ -
-	"x_nx509,d2i_pu,d2i_pr,i2d_pu,i2d_pr"
+	"d2i_pu,d2i_pr,i2d_pu,i2d_pr"
 $ LIB_ASN1_2 = "t_req,t_x509,t_x509a,t_crl,t_pkey,t_spki,t_bitst,"+ -
 	"tasn_new,tasn_fre,tasn_enc,tasn_dec,tasn_utl,tasn_typ,"+ -
 	"tasn_prn,tasn_scn,ameth_lib,"+ -
@@ -339,11 +339,10 @@ $ LIB_PKCS12 = "p12_add,p12_asn,p12_attr,p12_crpt,p12_crt,p12_decr,"+ -
 	"p12_init,p12_key,p12_kiss,p12_mutl,"+ -
 	"p12_utl,p12_npas,pk12err,p12_p8d,p12_p8e"
 $ LIB_COMP = "comp_lib,comp_err,"+ -
-	"c_rle,c_zlib"
+	"c_zlib"
 $ LIB_OCSP = "ocsp_asn,ocsp_ext,ocsp_ht,ocsp_lib,ocsp_cl,"+ -
 	"ocsp_srv,ocsp_prn,ocsp_vfy,ocsp_err,v3_ocsp"
 $ LIB_UI = "ui_err,ui_lib,ui_openssl,ui_util"
-$ LIB_KRB5 = "krb5_asn"
 $ LIB_CMS = "cms_lib,cms_asn1,cms_att,cms_io,cms_smime,cms_err,"+ -
 	"cms_sd,cms_dd,cms_cd,cms_env,cms_enc,cms_ess,"+ -
 	"cms_pwri,cms_kari"

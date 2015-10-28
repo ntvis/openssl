@@ -300,6 +300,30 @@ elsif ($shlib && $FLAVOR =~ /CE/)
 	$lib_cflag.=" -D_DLL" if (!$fipscanisterbuild);
 	}
 
+sub do_rehash_rule {
+    my ($target, $deps) = @_;
+    my $ret = <<"EOF";
+$target: $deps
+	set OPENSSL=\$(BIN_D)${o}openssl.exe
+	set OPENSSL_DEBUG_MEMORY=on
+	\$(PERL) tools/c_rehash certs/demo
+	echo off > $target
+EOF
+    return $ret
+}
+sub do_test_rule {
+    my ($target, $deps, $test_cmd) = @_;
+    my $ret = <<"EOF";
+$target: $deps force.$target
+	set TOP=.
+	set BIN_D=\$(BIN_D)
+	set TEST_D=\$(TEST_D)
+	set PERL=\$(PERL)
+	\$(PERL) test\\$test_cmd
+force.$target:
+EOF
+}
+
 sub do_lib_rule
 	{
 	my($objs,$target,$name,$shlib,$ign,$base_addr) = @_;
@@ -365,7 +389,7 @@ sub do_link_rule
 	my($target,$files,$dep_libs,$libs,$standalone)=@_;
 	local($ret,$_);
 	$file =~ s/\//$o/g if $o ne '/';
-	$n=&bname($targer);
+	$n=&bname($target);
 	$ret.="$target: $files $dep_libs\n";
 	if ($standalone == 1)
 		{
@@ -401,7 +425,7 @@ sub do_rlink_rule
 	my $files = "$rl_start $rl_mid $rl_end";
 
 	$file =~ s/\//$o/g if $o ne '/';
-	$n=&bname($targer);
+	$n=&bname($target);
 	$ret.="$target: $files $dep_libs \$(FIPS_SHA1_EXE)\n";
 	$ret.="\t\$(PERL) ms\\segrenam.pl \$\$a $rl_start\n";
 	$ret.="\t\$(PERL) ms\\segrenam.pl \$\$b $rl_mid\n";

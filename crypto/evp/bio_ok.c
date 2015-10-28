@@ -120,7 +120,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
@@ -176,21 +176,13 @@ static int ok_new(BIO *bi)
 {
     BIO_OK_CTX *ctx;
 
-    ctx = (BIO_OK_CTX *)OPENSSL_malloc(sizeof(BIO_OK_CTX));
+    ctx = OPENSSL_zalloc(sizeof(*ctx));
     if (ctx == NULL)
         return (0);
 
-    ctx->buf_len = 0;
-    ctx->buf_off = 0;
-    ctx->buf_len_save = 0;
-    ctx->buf_off_save = 0;
     ctx->cont = 1;
-    ctx->finished = 0;
-    ctx->blockout = 0;
     ctx->sigio = 1;
-
     EVP_MD_CTX_init(&ctx->md);
-
     bi->init = 0;
     bi->ptr = (char *)ctx;
     bi->flags = 0;
@@ -202,8 +194,7 @@ static int ok_free(BIO *a)
     if (a == NULL)
         return (0);
     EVP_MD_CTX_cleanup(&((BIO_OK_CTX *)a->ptr)->md);
-    OPENSSL_cleanse(a->ptr, sizeof(BIO_OK_CTX));
-    OPENSSL_free(a->ptr);
+    OPENSSL_clear_free(a->ptr, sizeof(BIO_OK_CTX));
     a->ptr = NULL;
     a->init = 0;
     a->flags = 0;
@@ -338,8 +329,7 @@ static int ok_write(BIO *b, const char *in, int inl)
         n = (inl + ctx->buf_len > OK_BLOCK_SIZE + OK_BLOCK_BLOCK) ?
             (int)(OK_BLOCK_SIZE + OK_BLOCK_BLOCK - ctx->buf_len) : inl;
 
-        memcpy((unsigned char *)(&(ctx->buf[ctx->buf_len])),
-               (unsigned char *)in, n);
+        memcpy(&ctx->buf[ctx->buf_len], in, n);
         ctx->buf_len += n;
         inl -= n;
         in += n;

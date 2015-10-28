@@ -60,6 +60,8 @@
 #include <openssl/pem.h>
 #include <openssl/err.h>
 #include <openssl/x509v3.h>
+#include <openssl/pkcs12.h>
+#include "internal/numbers.h"
 
 /* Remove spaces from beginning and end of a string */
 
@@ -122,12 +124,58 @@ static int parse_line(char **pkw, char **pval, char *linebuf)
     return 1;
 }
 
+/*
+ * Unescape some escape sequences in string literals.
+ * Return the result in a newly allocated buffer.
+ * Currently only supports '\n'.
+ * If the input length is 0, returns a valid 1-byte buffer, but sets
+ * the length to 0.
+ */
+static unsigned char* unescape(const char *input, size_t input_len,
+                               size_t *out_len)
+{
+    unsigned char *ret, *p;
+    size_t i;
+    if (input_len == 0) {
+        *out_len = 0;
+        return OPENSSL_zalloc(1);
+    }
+
+    /* Escaping is non-expanding; over-allocate original size for simplicity. */
+    ret = p = OPENSSL_malloc(input_len);
+    if (ret == NULL)
+        return NULL;
+
+    for (i = 0; i < input_len; i++) {
+        if (input[i] == '\\') {
+            if (i == input_len - 1 || input[i+1] != 'n')
+                goto err;
+            *p++ = '\n';
+            i++;
+        } else {
+            *p++ = input[i];
+        }
+    }
+
+    *out_len = p - ret;
+    return ret;
+
+ err:
+    OPENSSL_free(ret);
+    return NULL;
+}
+
 /* For a hex string "value" convert to a binary allocated buffer */
 static int test_bin(const char *value, unsigned char **buf, size_t *buflen)
 {
     long len;
     if (!*value) {
-        /* Don't return NULL for zero length buffer */
+        /*
+         * Don't return NULL for zero length buffer.
+         * This is needed for some tests with empty keys: HMAC_Init_ex() expects
+         * a non-NULL key buffer even if the key length is 0, in order to detect
+         * key reset.
+         */
         *buf = OPENSSL_malloc(1);
         if (!*buf)
             return 0;
@@ -143,10 +191,12 @@ static int test_bin(const char *value, unsigned char **buf, size_t *buflen)
         if (value[vlen - 1] != '"')
             return 0;
         vlen--;
-        *buf = BUF_memdup(value, vlen);
-        *buflen = vlen;
+        *buf = unescape(value, vlen, buflen);
+        if (*buf == NULL)
+            return 0;
         return 1;
     }
+
     *buf = string_to_hex(value, &len);
     if (!*buf) {
         fprintf(stderr, "Value=%s\n", value);
@@ -155,6 +205,30 @@ static int test_bin(const char *value, unsigned char **buf, size_t *buflen)
     }
     /* Size of input buffer means we'll never overflow */
     *buflen = len;
+    return 1;
+}
+/* Parse unsigned decimal 64 bit integer value */
+static int test_uint64(const char *value, uint64_t *pr)
+{
+    const char *p = value;
+    if (!*p) {
+        fprintf(stderr, "Invalid empty integer value\n");
+        return -1;
+    }
+    *pr = 0;
+    while (*p) {
+        if (*pr > UINT64_MAX/10) {
+            fprintf(stderr, "Integer string overflow value=%s\n", value);
+            return -1;
+        }
+        *pr *= 10;
+        if (*p < '0' || *p > '9') {
+            fprintf(stderr, "Invalid integer string value=%s\n", value);
+            return -1;
+        }
+        *pr += *p - '0';
+        p++;
+    }
     return 1;
 }
 
@@ -182,9 +256,10 @@ struct evp_test {
     /* Number of tests skipped */
     int nskip;
     /* If output mismatch expected and got value */
-    unsigned char *out_got;
+    unsigned char *out_received;
+    size_t out_received_len;
     unsigned char *out_expected;
-    size_t out_len;
+    size_t out_expected_len;
     /* test specific data */
     void *data;
     /* Current test should be skipped */
@@ -216,6 +291,8 @@ static const struct evp_test_method mac_test_method;
 static const struct evp_test_method psign_test_method, pverify_test_method;
 static const struct evp_test_method pdecrypt_test_method;
 static const struct evp_test_method pverify_recover_test_method;
+static const struct evp_test_method pbe_test_method;
+static const struct evp_test_method encode_test_method;
 
 static const struct evp_test_method *evp_test_list[] = {
     &digest_test_method,
@@ -225,14 +302,17 @@ static const struct evp_test_method *evp_test_list[] = {
     &pverify_test_method,
     &pdecrypt_test_method,
     &pverify_recover_test_method,
+    &pbe_test_method,
+    &encode_test_method,
     NULL
 };
 
 static const struct evp_test_method *evp_find_test(const char *name)
 {
     const struct evp_test_method **tt;
+
     for (tt = evp_test_list; *tt; tt++) {
-        if (!strcmp(name, (*tt)->name))
+        if (strcmp(name, (*tt)->name) == 0)
             return *tt;
     }
     return NULL;
@@ -249,24 +329,24 @@ static void hex_print(const char *name, const unsigned char *buf, size_t len)
 
 static void free_expected(struct evp_test *t)
 {
-    if (t->expected_err) {
-        OPENSSL_free(t->expected_err);
-        t->expected_err = NULL;
-    }
-    if (t->out_expected) {
-        OPENSSL_free(t->out_expected);
-        OPENSSL_free(t->out_got);
-        t->out_expected = NULL;
-        t->out_got = NULL;
-    }
+    OPENSSL_free(t->expected_err);
+    t->expected_err = NULL;
+    OPENSSL_free(t->out_expected);
+    OPENSSL_free(t->out_received);
+    t->out_expected = NULL;
+    t->out_received = NULL;
+    t->out_expected_len = 0;
+    t->out_received_len = 0;
+    /* Literals. */
+    t->err = NULL;
 }
 
 static void print_expected(struct evp_test *t)
 {
-    if (t->out_expected == NULL)
+    if (t->out_expected == NULL && t->out_received == NULL)
         return;
-    hex_print("Expected:", t->out_expected, t->out_len);
-    hex_print("Got:     ", t->out_got, t->out_len);
+    hex_print("Expected:", t->out_expected, t->out_expected_len);
+    hex_print("Got:     ", t->out_received, t->out_received_len);
     free_expected(t);
 }
 
@@ -285,7 +365,7 @@ static int check_test_error(struct evp_test *t)
                 t->start_line, t->expected_err);
         return 0;
     }
-    if (!strcmp(t->err, t->expected_err))
+    if (strcmp(t->err, t->expected_err) == 0)
         return 1;
 
     fprintf(stderr, "Test line %d: expecting %s got %s\n",
@@ -320,10 +400,8 @@ static int setup_test(struct evp_test *t, const struct evp_test_method *tmeth)
         t->meth->cleanup(t);
         OPENSSL_free(t->data);
         t->data = NULL;
-        if (t->expected_err) {
-            OPENSSL_free(t->expected_err);
-            t->expected_err = NULL;
-        }
+        OPENSSL_free(t->expected_err);
+        t->expected_err = NULL;
         free_expected(t);
     }
     t->meth = tmeth;
@@ -333,7 +411,7 @@ static int setup_test(struct evp_test *t, const struct evp_test_method *tmeth)
 static int find_key(EVP_PKEY **ppk, const char *name, struct key_list *lst)
 {
     for (; lst; lst = lst->next) {
-        if (!strcmp(lst->name, name)) {
+        if (strcmp(lst->name, name) == 0) {
             if (ppk)
                 *ppk = lst->key;
             return 1;
@@ -367,17 +445,17 @@ static int check_unsupported()
 
 static int process_test(struct evp_test *t, char *buf, int verbose)
 {
-    char *keyword, *value;
+    char *keyword = NULL, *value = NULL;
     int rv = 0, add_key = 0;
-    long save_pos;
-    struct key_list **lst, *key;
+    long save_pos = 0;
+    struct key_list **lst = NULL, *key = NULL;
     EVP_PKEY *pk = NULL;
-    const struct evp_test_method *tmeth;
+    const struct evp_test_method *tmeth = NULL;
     if (verbose)
         fputs(buf, stdout);
     if (!parse_line(&keyword, &value, buf))
         return 1;
-    if (!strcmp(keyword, "PrivateKey")) {
+    if (strcmp(keyword, "PrivateKey") == 0) {
         save_pos = ftell(t->in);
         pk = PEM_read_PrivateKey(t->in, NULL, 0, NULL);
         if (pk == NULL && !check_unsupported()) {
@@ -388,7 +466,7 @@ static int process_test(struct evp_test *t, char *buf, int verbose)
         lst = &t->private;
         add_key = 1;
     }
-    if (!strcmp(keyword, "PublicKey")) {
+    if (strcmp(keyword, "PublicKey") == 0) {
         save_pos = ftell(t->in);
         pk = PEM_read_PUBKEY(t->in, NULL, 0, NULL);
         if (pk == NULL && !check_unsupported()) {
@@ -406,7 +484,7 @@ static int process_test(struct evp_test *t, char *buf, int verbose)
             fprintf(stderr, "Duplicate key %s\n", value);
             return 0;
         }
-        key = OPENSSL_malloc(sizeof(struct key_list));
+        key = OPENSSL_malloc(sizeof(*key));
         if (!key)
             return 0;
         key->name = BUF_strdup(value);
@@ -417,7 +495,7 @@ static int process_test(struct evp_test *t, char *buf, int verbose)
         fseek(t->in, save_pos, SEEK_SET);
         while (fgets(tmpbuf, sizeof(tmpbuf), t->in)) {
             t->line++;
-            if (!strncmp(tmpbuf, "-----END", 8))
+            if (strncmp(tmpbuf, "-----END", 8) == 0)
                 return 1;
         }
         fprintf(stderr, "Can't find key end\n");
@@ -438,7 +516,7 @@ static int process_test(struct evp_test *t, char *buf, int verbose)
         return 1;
     } else if (t->skip) {
         return 1;
-    } else if (!strcmp(keyword, "Result")) {
+    } else if (strcmp(keyword, "Result") == 0) {
         if (t->expected_err) {
             fprintf(stderr, "Line %d: multiple result lines\n", t->line);
             return 0;
@@ -464,19 +542,35 @@ static int process_test(struct evp_test *t, char *buf, int verbose)
     return 1;
 }
 
-static int check_output(struct evp_test *t, const unsigned char *expected,
-                        const unsigned char *got, size_t len)
+static int check_var_length_output(struct evp_test *t,
+                                   const unsigned char *expected,
+                                   size_t expected_len,
+                                   const unsigned char *received,
+                                   size_t received_len)
 {
-    if (!memcmp(expected, got, len))
+    if (expected_len == received_len &&
+        memcmp(expected, received, expected_len) == 0) {
         return 0;
-    t->out_expected = BUF_memdup(expected, len);
-    t->out_got = BUF_memdup(got, len);
-    t->out_len = len;
-    if (t->out_expected == NULL || t->out_got == NULL) {
+    }
+
+    /* The result printing code expects a non-NULL buffer. */
+    t->out_expected = BUF_memdup(expected, expected_len ? expected_len : 1);
+    t->out_expected_len = expected_len;
+    t->out_received = BUF_memdup(received, received_len ? received_len : 1);
+    t->out_received_len = received_len;
+    if (t->out_expected == NULL || t->out_received == NULL) {
         fprintf(stderr, "Memory allocation error!\n");
         exit(1);
     }
     return 1;
+}
+
+static int check_output(struct evp_test *t,
+                        const unsigned char *expected,
+                        const unsigned char *received,
+                        size_t len)
+{
+    return check_var_length_output(t, expected, len, received, len);
 }
 
 int main(int argc, char **argv)
@@ -496,17 +590,7 @@ int main(int argc, char **argv)
     OpenSSL_add_all_algorithms();
 
     memset(&t, 0, sizeof(t));
-    t.meth = NULL;
-    t.public = NULL;
-    t.private = NULL;
-    t.err = NULL;
-    t.line = 0;
     t.start_line = -1;
-    t.errors = 0;
-    t.ntests = 0;
-    t.out_expected = NULL;
-    t.out_got = NULL;
-    t.out_len = 0;
     in = fopen(argv[1], "r");
     t.in = in;
     while (fgets(buf, sizeof(buf), in)) {
@@ -534,8 +618,7 @@ int main(int argc, char **argv)
 
 static void test_free(void *d)
 {
-    if (d)
-        OPENSSL_free(d);
+    OPENSSL_free(d);
 }
 
 /* Message digest tests */
@@ -556,7 +639,7 @@ struct digest_data {
 static int digest_test_init(struct evp_test *t, const char *alg)
 {
     const EVP_MD *digest;
-    struct digest_data *mdat = t->data;
+    struct digest_data *mdat;
     digest = EVP_get_digestbyname(alg);
     if (!digest) {
         /* If alg has an OID assume disabled algorithm */
@@ -566,7 +649,7 @@ static int digest_test_init(struct evp_test *t, const char *alg)
         }
         return 0;
     }
-    mdat = OPENSSL_malloc(sizeof(struct digest_data));
+    mdat = OPENSSL_malloc(sizeof(*mdat));
     mdat->digest = digest;
     mdat->input = NULL;
     mdat->output = NULL;
@@ -586,11 +669,11 @@ static int digest_test_parse(struct evp_test *t,
                              const char *keyword, const char *value)
 {
     struct digest_data *mdata = t->data;
-    if (!strcmp(keyword, "Input"))
+    if (strcmp(keyword, "Input") == 0)
         return test_bin(value, &mdata->input, &mdata->input_len);
-    if (!strcmp(keyword, "Output"))
+    if (strcmp(keyword, "Output") == 0)
         return test_bin(value, &mdata->output, &mdata->output_len);
-    if (!strcmp(keyword, "Count")) {
+    if (strcmp(keyword, "Count") == 0) {
         long nrpt = atoi(value);
         if (nrpt <= 0)
             return 0;
@@ -678,7 +761,7 @@ static int cipher_test_init(struct evp_test *t, const char *alg)
         }
         return 0;
     }
-    cdat = OPENSSL_malloc(sizeof(struct cipher_data));
+    cdat = OPENSSL_malloc(sizeof(*cdat));
     cdat->cipher = cipher;
     cdat->enc = -1;
     cdat->key = NULL;
@@ -713,25 +796,25 @@ static int cipher_test_parse(struct evp_test *t, const char *keyword,
                              const char *value)
 {
     struct cipher_data *cdat = t->data;
-    if (!strcmp(keyword, "Key"))
+    if (strcmp(keyword, "Key") == 0)
         return test_bin(value, &cdat->key, &cdat->key_len);
-    if (!strcmp(keyword, "IV"))
+    if (strcmp(keyword, "IV") == 0)
         return test_bin(value, &cdat->iv, &cdat->iv_len);
-    if (!strcmp(keyword, "Plaintext"))
+    if (strcmp(keyword, "Plaintext") == 0)
         return test_bin(value, &cdat->plaintext, &cdat->plaintext_len);
-    if (!strcmp(keyword, "Ciphertext"))
+    if (strcmp(keyword, "Ciphertext") == 0)
         return test_bin(value, &cdat->ciphertext, &cdat->ciphertext_len);
     if (cdat->aead) {
-        if (!strcmp(keyword, "AAD"))
+        if (strcmp(keyword, "AAD") == 0)
             return test_bin(value, &cdat->aad, &cdat->aad_len);
-        if (!strcmp(keyword, "Tag"))
+        if (strcmp(keyword, "Tag") == 0)
             return test_bin(value, &cdat->tag, &cdat->tag_len);
     }
 
-    if (!strcmp(keyword, "Operation")) {
-        if (!strcmp(value, "ENCRYPT"))
+    if (strcmp(keyword, "Operation") == 0) {
+        if (strcmp(value, "ENCRYPT") == 0)
             cdat->enc = 1;
-        else if (!strcmp(value, "DECRYPT"))
+        else if (strcmp(value, "DECRYPT") == 0)
             cdat->enc = 0;
         else
             return 0;
@@ -861,8 +944,7 @@ static int cipher_test_enc(struct evp_test *t, int enc)
     }
     err = NULL;
  err:
-    if (tmp)
-        OPENSSL_free(tmp);
+    OPENSSL_free(tmp);
     EVP_CIPHER_CTX_free(ctx);
     t->err = err;
     return err ? 0 : 1;
@@ -936,14 +1018,14 @@ static int mac_test_init(struct evp_test *t, const char *alg)
 {
     int type;
     struct mac_data *mdat;
-    if (!strcmp(alg, "HMAC"))
+    if (strcmp(alg, "HMAC") == 0)
         type = EVP_PKEY_HMAC;
-    else if (!strcmp(alg, "CMAC"))
+    else if (strcmp(alg, "CMAC") == 0)
         type = EVP_PKEY_CMAC;
     else
         return 0;
 
-    mdat = OPENSSL_malloc(sizeof(struct mac_data));
+    mdat = OPENSSL_malloc(sizeof(*mdat));
     mdat->type = type;
     mdat->alg = NULL;
     mdat->key = NULL;
@@ -966,17 +1048,17 @@ static int mac_test_parse(struct evp_test *t,
                           const char *keyword, const char *value)
 {
     struct mac_data *mdata = t->data;
-    if (!strcmp(keyword, "Key"))
+    if (strcmp(keyword, "Key") == 0)
         return test_bin(value, &mdata->key, &mdata->key_len);
-    if (!strcmp(keyword, "Algorithm")) {
+    if (strcmp(keyword, "Algorithm") == 0) {
         mdata->alg = BUF_strdup(value);
         if (!mdata->alg)
             return 0;
         return 1;
     }
-    if (!strcmp(keyword, "Input"))
+    if (strcmp(keyword, "Input") == 0)
         return test_bin(value, &mdata->input, &mdata->input_len);
-    if (!strcmp(keyword, "Output"))
+    if (strcmp(keyword, "Output") == 0)
         return test_bin(value, &mdata->output, &mdata->output_len);
     return 0;
 }
@@ -1049,8 +1131,7 @@ static int mac_test_run(struct evp_test *t)
  err:
     if (mctx)
         EVP_MD_CTX_destroy(mctx);
-    if (mac)
-        OPENSSL_free(mac);
+    OPENSSL_free(mac);
     EVP_PKEY_CTX_free(genctx);
     EVP_PKEY_free(key);
     t->err = err;
@@ -1112,7 +1193,7 @@ static int pkey_test_init(struct evp_test *t, const char *name,
         return 1;
     }
 
-    kdata = OPENSSL_malloc(sizeof(struct pkey_data));
+    kdata = OPENSSL_malloc(sizeof(*kdata));
     if (!kdata) {
         EVP_PKEY_free(pkey);
         return 0;
@@ -1133,10 +1214,9 @@ static int pkey_test_init(struct evp_test *t, const char *name,
 static void pkey_test_cleanup(struct evp_test *t)
 {
     struct pkey_data *kdata = t->data;
-    if (kdata->input)
-        OPENSSL_free(kdata->input);
-    if (kdata->output)
-        OPENSSL_free(kdata->output);
+
+    OPENSSL_free(kdata->input);
+    OPENSSL_free(kdata->output);
     EVP_PKEY_CTX_free(kdata->ctx);
 }
 
@@ -1144,11 +1224,11 @@ static int pkey_test_parse(struct evp_test *t,
                            const char *keyword, const char *value)
 {
     struct pkey_data *kdata = t->data;
-    if (!strcmp(keyword, "Input"))
+    if (strcmp(keyword, "Input") == 0)
         return test_bin(value, &kdata->input, &kdata->input_len);
-    if (!strcmp(keyword, "Output"))
+    if (strcmp(keyword, "Output") == 0)
         return test_bin(value, &kdata->output, &kdata->output_len);
-    if (!strcmp(keyword, "Ctrl")) {
+    if (strcmp(keyword, "Ctrl") == 0) {
         char *p = strchr(value, ':');
         if (p)
             *p++ = 0;
@@ -1185,8 +1265,7 @@ static int pkey_test_run(struct evp_test *t)
         goto err;
     err = NULL;
  err:
-    if (out)
-        OPENSSL_free(out);
+    OPENSSL_free(out);
     t->err = err;
     return 1;
 }
@@ -1252,4 +1331,326 @@ static const struct evp_test_method pverify_test_method = {
     pkey_test_cleanup,
     pkey_test_parse,
     verify_test_run
+};
+
+/* PBE tests */
+
+#define PBE_TYPE_SCRYPT 1
+#define PBE_TYPE_PBKDF2 2
+#define PBE_TYPE_PKCS12 3
+
+struct pbe_data {
+
+    int pbe_type;
+
+    /* scrypt parameters */
+    uint64_t N, r, p, maxmem;
+
+    /* PKCS#12 parameters */
+    int id, iter;
+    const EVP_MD *md;
+
+    /* password */
+    unsigned char *pass;
+    size_t pass_len;
+
+    /* salt */
+    unsigned char *salt;
+    size_t salt_len;
+
+    /* Expected output */
+    unsigned char *key;
+    size_t key_len;
+};
+
+#ifndef OPENSSL_NO_SCRYPT
+static int scrypt_test_parse(struct evp_test *t,
+                             const char *keyword, const char *value)
+{
+    struct pbe_data *pdata = t->data;
+
+    if (strcmp(keyword, "N") == 0)
+        return test_uint64(value, &pdata->N);
+    if (strcmp(keyword, "p") == 0)
+        return test_uint64(value, &pdata->p);
+    if (strcmp(keyword, "r") == 0)
+        return test_uint64(value, &pdata->r);
+    if (strcmp(keyword, "maxmem") == 0)
+        return test_uint64(value, &pdata->maxmem);
+    return 0;
+}
+#endif
+
+static int pbkdf2_test_parse(struct evp_test *t,
+                             const char *keyword, const char *value)
+{
+    struct pbe_data *pdata = t->data;
+
+    if (strcmp(keyword, "iter") == 0) {
+        pdata->iter = atoi(value);
+        if (pdata->iter <= 0)
+            return 0;
+        return 1;
+    }
+    if (strcmp(keyword, "MD") == 0) {
+        pdata->md = EVP_get_digestbyname(value);
+        if (pdata->md == NULL)
+            return 0;
+        return 1;
+    }
+    return 0;
+}
+
+static int pkcs12_test_parse(struct evp_test *t,
+                             const char *keyword, const char *value)
+{
+    struct pbe_data *pdata = t->data;
+
+    if (strcmp(keyword, "id") == 0) {
+        pdata->id = atoi(value);
+        if (pdata->id <= 0)
+            return 0;
+        return 1;
+    }
+    return pbkdf2_test_parse(t, keyword, value);
+}
+
+static int pbe_test_init(struct evp_test *t, const char *alg)
+{
+    struct pbe_data *pdat;
+    int pbe_type = 0;
+
+#ifndef OPENSSL_NO_SCRYPT
+    if (strcmp(alg, "scrypt") == 0)
+        pbe_type = PBE_TYPE_SCRYPT;
+#endif
+    else if (strcmp(alg, "pbkdf2") == 0)
+        pbe_type = PBE_TYPE_PBKDF2;
+    else if (strcmp(alg, "pkcs12") == 0)
+        pbe_type = PBE_TYPE_PKCS12;
+    else
+        fprintf(stderr, "Unknown pbe algorithm %s\n", alg);
+    pdat = OPENSSL_malloc(sizeof(*pdat));
+    pdat->pbe_type = pbe_type;
+    pdat->pass = NULL;
+    pdat->salt = NULL;
+    pdat->N = 0;
+    pdat->r = 0;
+    pdat->p = 0;
+    pdat->maxmem = 0;
+    pdat->id = 0;
+    pdat->iter = 0;
+    pdat->md = NULL;
+    t->data = pdat;
+    return 1;
+}
+
+static void pbe_test_cleanup(struct evp_test *t)
+{
+    struct pbe_data *pdat = t->data;
+    test_free(pdat->pass);
+    test_free(pdat->salt);
+    test_free(pdat->key);
+}
+
+static int pbe_test_parse(struct evp_test *t,
+                             const char *keyword, const char *value)
+{
+    struct pbe_data *pdata = t->data;
+
+    if (strcmp(keyword, "Password") == 0)
+        return test_bin(value, &pdata->pass, &pdata->pass_len);
+    if (strcmp(keyword, "Salt") == 0)
+        return test_bin(value, &pdata->salt, &pdata->salt_len);
+    if (strcmp(keyword, "Key") == 0)
+        return test_bin(value, &pdata->key, &pdata->key_len);
+    if (pdata->pbe_type == PBE_TYPE_PBKDF2)
+        return pbkdf2_test_parse(t, keyword, value);
+    else if (pdata->pbe_type == PBE_TYPE_PKCS12)
+        return pkcs12_test_parse(t, keyword, value);
+#ifndef OPENSSL_NO_SCRYPT
+    else if (pdata->pbe_type == PBE_TYPE_SCRYPT)
+        return scrypt_test_parse(t, keyword, value);
+#endif
+    return 0;
+}
+
+static int pbe_test_run(struct evp_test *t)
+{
+    struct pbe_data *pdata = t->data;
+    const char *err = "INTERNAL_ERROR";
+    unsigned char *key;
+
+    key = OPENSSL_malloc(pdata->key_len);
+    if (!key)
+        goto err;
+    if (pdata->pbe_type == PBE_TYPE_PBKDF2) {
+        err = "PBKDF2_ERROR";
+        if (PKCS5_PBKDF2_HMAC((char *)pdata->pass, pdata->pass_len,
+                              pdata->salt, pdata->salt_len,
+                              pdata->iter, pdata->md,
+                              pdata->key_len, key) == 0)
+            goto err;
+#ifndef OPENSSL_NO_SCRYPT
+    } else if (pdata->pbe_type == PBE_TYPE_SCRYPT) {
+        err = "SCRYPT_ERROR";
+        if (EVP_PBE_scrypt((const char *)pdata->pass, pdata->pass_len,
+                           pdata->salt, pdata->salt_len,
+                           pdata->N, pdata->r, pdata->p, pdata->maxmem,
+                           key, pdata->key_len) == 0)
+            goto err;
+#endif
+    } else if (pdata->pbe_type == PBE_TYPE_PKCS12) {
+        err = "PKCS12_ERROR";
+        if (PKCS12_key_gen_uni(pdata->pass, pdata->pass_len,
+                               pdata->salt, pdata->salt_len,
+                               pdata->id, pdata->iter, pdata->key_len,
+                               key, pdata->md) == 0)
+            goto err;
+    }
+    err = "KEY_MISMATCH";
+    if (check_output(t, pdata->key, key, pdata->key_len))
+        goto err;
+    err = NULL;
+    err:
+    OPENSSL_free(key);
+    t->err = err;
+    return 1;
+}
+
+static const struct evp_test_method pbe_test_method = {
+    "PBE",
+    pbe_test_init,
+    pbe_test_cleanup,
+    pbe_test_parse,
+    pbe_test_run
+};
+
+/* Base64 tests */
+
+typedef enum {
+    BASE64_CANONICAL_ENCODING = 0,
+    BASE64_VALID_ENCODING = 1,
+    BASE64_INVALID_ENCODING = 2
+} base64_encoding_type;
+
+struct encode_data {
+    /* Input to encoding */
+    unsigned char *input;
+    size_t input_len;
+    /* Expected output */
+    unsigned char *output;
+    size_t output_len;
+    base64_encoding_type encoding;
+};
+
+static int encode_test_init(struct evp_test *t, const char *encoding)
+{
+    struct encode_data *edata = OPENSSL_zalloc(sizeof(*edata));
+
+    if (strcmp(encoding, "canonical") == 0) {
+        edata->encoding = BASE64_CANONICAL_ENCODING;
+    } else if (strcmp(encoding, "valid") == 0) {
+        edata->encoding = BASE64_VALID_ENCODING;
+    } else if (strcmp(encoding, "invalid") == 0) {
+        edata->encoding = BASE64_INVALID_ENCODING;
+        t->expected_err = BUF_strdup("DECODE_ERROR");
+        if (t->expected_err == NULL)
+            return 0;
+    } else {
+        fprintf(stderr, "Bad encoding: %s. Should be one of "
+                "{canonical, valid, invalid}\n", encoding);
+        return 0;
+    }
+    t->data = edata;
+    return 1;
+}
+
+static void encode_test_cleanup(struct evp_test *t)
+{
+    struct encode_data *edata = t->data;
+    test_free(edata->input);
+    test_free(edata->output);
+    memset(edata, 0, sizeof(*edata));
+}
+
+static int encode_test_parse(struct evp_test *t,
+                             const char *keyword, const char *value)
+{
+    struct encode_data *edata = t->data;
+    if (strcmp(keyword, "Input") == 0)
+        return test_bin(value, &edata->input, &edata->input_len);
+    if (strcmp(keyword, "Output") == 0)
+        return test_bin(value, &edata->output, &edata->output_len);
+    return 0;
+}
+
+static int encode_test_run(struct evp_test *t)
+{
+    struct encode_data *edata = t->data;
+    unsigned char *encode_out = NULL, *decode_out = NULL;
+    int output_len, chunk_len;
+    const char *err = "INTERNAL_ERROR";
+    EVP_ENCODE_CTX decode_ctx;
+
+    if (edata->encoding == BASE64_CANONICAL_ENCODING) {
+        EVP_ENCODE_CTX encode_ctx;
+        encode_out = OPENSSL_malloc(EVP_ENCODE_LENGTH(edata->input_len));
+        if (encode_out == NULL)
+            goto err;
+
+        EVP_EncodeInit(&encode_ctx);
+        EVP_EncodeUpdate(&encode_ctx, encode_out, &chunk_len,
+                         edata->input, edata->input_len);
+        output_len = chunk_len;
+
+        EVP_EncodeFinal(&encode_ctx, encode_out + chunk_len, &chunk_len);
+        output_len += chunk_len;
+
+        if (check_var_length_output(t, edata->output, edata->output_len,
+                                    encode_out, output_len)) {
+            err = "BAD_ENCODING";
+            goto err;
+        }
+    }
+
+    decode_out = OPENSSL_malloc(EVP_DECODE_LENGTH(edata->output_len));
+    if (decode_out == NULL)
+        goto err;
+
+    EVP_DecodeInit(&decode_ctx);
+    if (EVP_DecodeUpdate(&decode_ctx, decode_out, &chunk_len, edata->output,
+                         edata->output_len) < 0) {
+        err = "DECODE_ERROR";
+        goto err;
+    }
+    output_len = chunk_len;
+
+    if (EVP_DecodeFinal(&decode_ctx, decode_out + chunk_len, &chunk_len) != 1) {
+        err = "DECODE_ERROR";
+        goto err;
+    }
+    output_len += chunk_len;
+
+    if (edata->encoding != BASE64_INVALID_ENCODING &&
+        check_var_length_output(t, edata->input, edata->input_len,
+                                decode_out, output_len)) {
+        err = "BAD_DECODING";
+        goto err;
+    }
+
+    err = NULL;
+ err:
+    t->err = err;
+    OPENSSL_free(encode_out);
+    OPENSSL_free(decode_out);
+    return 1;
+}
+
+static const struct evp_test_method encode_test_method = {
+    "Encoding",
+    encode_test_init,
+    encode_test_cleanup,
+    encode_test_parse,
+    encode_test_run,
 };

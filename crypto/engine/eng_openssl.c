@@ -64,7 +64,7 @@
 
 #include <stdio.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/engine.h>
 #include <openssl/dso.h>
 #include <openssl/pem.h>
@@ -89,7 +89,9 @@
  * this is no longer automatic in ENGINE_load_builtin_engines().
  */
 #define TEST_ENG_OPENSSL_RC4
+#ifndef OPENSSL_NO_STDIO
 #define TEST_ENG_OPENSSL_PKEY
+#endif
 /* #define TEST_ENG_OPENSSL_HMAC */
 /* #define TEST_ENG_OPENSSL_HMAC_INIT */
 /* #define TEST_ENG_OPENSSL_RC4_OTHERS */
@@ -425,13 +427,10 @@ typedef struct {
 static int ossl_hmac_init(EVP_PKEY_CTX *ctx)
 {
     OSSL_HMAC_PKEY_CTX *hctx;
-    hctx = OPENSSL_malloc(sizeof(OSSL_HMAC_PKEY_CTX));
+
+    hctx = OPENSSL_zalloc(sizeof(*hctx));
     if (!hctx)
         return 0;
-    hctx->md = NULL;
-    hctx->ktmp.data = NULL;
-    hctx->ktmp.length = 0;
-    hctx->ktmp.flags = 0;
     hctx->ktmp.type = V_ASN1_OCTET_STRING;
     HMAC_CTX_init(&hctx->ctx);
     EVP_PKEY_CTX_set_data(ctx, hctx);
@@ -463,15 +462,10 @@ static int ossl_hmac_copy(EVP_PKEY_CTX *dst, EVP_PKEY_CTX *src)
 
 static void ossl_hmac_cleanup(EVP_PKEY_CTX *ctx)
 {
-    OSSL_HMAC_PKEY_CTX *hctx;
-    hctx = EVP_PKEY_CTX_get_data(ctx);
+    OSSL_HMAC_PKEY_CTX *hctx = EVP_PKEY_CTX_get_data(ctx);
+
     HMAC_CTX_cleanup(&hctx->ctx);
-    if (hctx->ktmp.data) {
-        if (hctx->ktmp.length)
-            OPENSSL_cleanse(hctx->ktmp.data, hctx->ktmp.length);
-        OPENSSL_free(hctx->ktmp.data);
-        hctx->ktmp.data = NULL;
-    }
+    OPENSSL_clear_free(hctx->ktmp.data, hctx->ktmp.length);
     OPENSSL_free(hctx);
 }
 
@@ -561,11 +555,11 @@ static int ossl_hmac_ctrl_str(EVP_PKEY_CTX *ctx,
     if (!value) {
         return 0;
     }
-    if (!strcmp(type, "key")) {
+    if (strcmp(type, "key") == 0) {
         void *p = (void *)value;
         return ossl_hmac_ctrl(ctx, EVP_PKEY_CTRL_SET_MAC_KEY, -1, p);
     }
-    if (!strcmp(type, "hexkey")) {
+    if (strcmp(type, "hexkey") == 0) {
         unsigned char *key;
         int r;
         long keylen;

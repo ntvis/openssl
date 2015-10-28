@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include "internal/asn1_int.h"
@@ -112,15 +112,12 @@ int X509_PUBKEY_set(X509_PUBKEY **x, EVP_PKEY *pkey)
         goto error;
     }
 
-    if (*x != NULL)
-        X509_PUBKEY_free(*x);
-
+    X509_PUBKEY_free(*x);
     *x = pk;
-
     return 1;
+
  error:
-    if (pk != NULL)
-        X509_PUBKEY_free(pk);
+    X509_PUBKEY_free(pk);
     return 0;
 }
 
@@ -187,13 +184,16 @@ EVP_PKEY *d2i_PUBKEY(EVP_PKEY **a, const unsigned char **pp, long length)
 {
     X509_PUBKEY *xpk;
     EVP_PKEY *pktmp;
-    xpk = d2i_X509_PUBKEY(NULL, pp, length);
+    const unsigned char *q;
+    q = *pp;
+    xpk = d2i_X509_PUBKEY(NULL, &q, length);
     if (!xpk)
         return NULL;
     pktmp = X509_PUBKEY_get(xpk);
     X509_PUBKEY_free(xpk);
     if (!pktmp)
         return NULL;
+    *pp = q;
     if (a) {
         EVP_PKEY_free(*a);
         *a = pktmp;
@@ -343,8 +343,7 @@ int X509_PUBKEY_set0_param(X509_PUBKEY *pub, ASN1_OBJECT *aobj,
     if (!X509_ALGOR_set0(pub->algor, aobj, ptype, pval))
         return 0;
     if (penc) {
-        if (pub->public_key->data)
-            OPENSSL_free(pub->public_key->data);
+        OPENSSL_free(pub->public_key->data);
         pub->public_key->data = penc;
         pub->public_key->length = penclen;
         /* Set number of unused bits to zero */

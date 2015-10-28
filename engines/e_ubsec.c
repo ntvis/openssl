@@ -339,8 +339,7 @@ static const char *get_UBSEC_LIBNAME(void)
 
 static void free_UBSEC_LIBNAME(void)
 {
-    if (UBSEC_LIBNAME)
-        OPENSSL_free((void *)UBSEC_LIBNAME);
+    OPENSSL_free(UBSEC_LIBNAME);
     UBSEC_LIBNAME = NULL;
 }
 
@@ -415,38 +414,26 @@ static int ubsec_init(ENGINE *e)
         goto err;
     }
 
-    if (!(p1 = (t_UBSEC_ubsec_bytes_to_bits *)
-          DSO_bind_func(ubsec_dso, UBSEC_F1))
-        || !(p2 = (t_UBSEC_ubsec_bits_to_bytes *)
-             DSO_bind_func(ubsec_dso, UBSEC_F2))
-        || !(p3 = (t_UBSEC_ubsec_open *)
-             DSO_bind_func(ubsec_dso, UBSEC_F3))
-        || !(p4 = (t_UBSEC_ubsec_close *)
-             DSO_bind_func(ubsec_dso, UBSEC_F4))
+#define BINDIT(t, name) (t *)DSO_bind_func(ubsec_dso, name)
+    if ((p1 = BINDIT(t_UBSEC_ubsec_bytes_to_bits, UBSEC_F1)) == NULL
+        || (p2 = BINDIT(t_UBSEC_ubsec_bits_to_bytes, UBSEC_F2)) == NULL
+        || (p3 = BINDIT(t_UBSEC_ubsec_open, UBSEC_F3)) == NULL
+        || (p4 = BINDIT(t_UBSEC_ubsec_close, UBSEC_F4)) == NULL
 #  ifndef OPENSSL_NO_DH
-        || !(p5 = (t_UBSEC_diffie_hellman_generate_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F5))
-        || !(p6 = (t_UBSEC_diffie_hellman_agree_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F6))
+        || (p5 = BINDIT(t_UBSEC_diffie_hellman_generate_ioctl, UBSEC_F5)) == NULL
+        || (p6 = BINDIT(t_UBSEC_diffie_hellman_agree_ioctl, UBSEC_F6)) == NULL
 #  endif
 /* #ifndef OPENSSL_NO_RSA */
-        || !(p7 = (t_UBSEC_rsa_mod_exp_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F7))
-        || !(p8 = (t_UBSEC_rsa_mod_exp_crt_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F8))
+        || (p7 = BINDIT(t_UBSEC_rsa_mod_exp_ioctl, UBSEC_F7)) == NULL
+        || (p8 = BINDIT(t_UBSEC_rsa_mod_exp_crt_ioctl, UBSEC_F8)) == NULL
 /* #endif */
 #  ifndef OPENSSL_NO_DSA
-        || !(p9 = (t_UBSEC_dsa_sign_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F9))
-        || !(p10 = (t_UBSEC_dsa_verify_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F10))
+        || (p9 = BINDIT(t_UBSEC_dsa_sign_ioctl, UBSEC_F9)) == NULL
+        || (p10 = BINDIT(t_UBSEC_dsa_verify_ioctl, UBSEC_F10)) == NULL
 #  endif
-        || !(p11 = (t_UBSEC_math_accelerate_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F11))
-        || !(p12 = (t_UBSEC_rng_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F12))
-        || !(p13 = (t_UBSEC_max_key_len_ioctl *)
-             DSO_bind_func(ubsec_dso, UBSEC_F13))) {
+        || (p11 = BINDIT(t_UBSEC_math_accelerate_ioctl, UBSEC_F11)) == NULL
+        || (p12 = BINDIT(t_UBSEC_rng_ioctl, UBSEC_F12)) == NULL
+        || (p13 = BINDIT(t_UBSEC_max_key_len_ioctl, UBSEC_F13)) == NULL) {
         UBSECerr(UBSEC_F_UBSEC_INIT, UBSEC_R_DSO_FAILURE);
         goto err;
     }
@@ -482,8 +469,7 @@ static int ubsec_init(ENGINE *e)
     }
 
  err:
-    if (ubsec_dso)
-        DSO_free(ubsec_dso);
+    DSO_free(ubsec_dso);
     ubsec_dso = NULL;
     p_UBSEC_ubsec_bytes_to_bits = NULL;
     p_UBSEC_ubsec_bits_to_bytes = NULL;
@@ -680,40 +666,6 @@ static int ubsec_mod_exp_crt(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 }
 #  endif
 
-#  ifndef OPENSSL_NO_DSA
-#   ifdef NOT_USED
-static int ubsec_dsa_mod_exp(DSA *dsa, BIGNUM *rr, BIGNUM *a1,
-                             BIGNUM *p1, BIGNUM *a2, BIGNUM *p2, BIGNUM *m,
-                             BN_CTX *ctx, BN_MONT_CTX *in_mont)
-{
-    BIGNUM t;
-    int to_return = 0;
-
-    BN_init(&t);
-    /* let rr = a1 ^ p1 mod m */
-    if (!ubsec_mod_exp(rr, a1, p1, m, ctx))
-        goto end;
-    /* let t = a2 ^ p2 mod m */
-    if (!ubsec_mod_exp(&t, a2, p2, m, ctx))
-        goto end;
-    /* let rr = rr * t mod m */
-    if (!BN_mod_mul(rr, rr, &t, m, ctx))
-        goto end;
-    to_return = 1;
- end:
-    BN_free(&t);
-    return to_return;
-}
-
-static int ubsec_mod_exp_dsa(DSA *dsa, BIGNUM *r, BIGNUM *a,
-                             const BIGNUM *p, const BIGNUM *m, BN_CTX *ctx,
-                             BN_MONT_CTX *m_ctx)
-{
-    return ubsec_mod_exp(r, a, p, m, ctx);
-}
-#   endif
-#  endif
-
 #  ifndef OPENSSL_NO_RSA
 
 /*
@@ -825,10 +777,8 @@ static DSA_SIG *ubsec_dsa_do_sign(const unsigned char *dgst, int dlen,
 
  err:
     if (!to_return) {
-        if (r)
-            BN_free(r);
-        if (s)
-            BN_free(s);
+        BN_free(r);
+        BN_free(s);
     }
     BN_clear_free(&m);
     return to_return;

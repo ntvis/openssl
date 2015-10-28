@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
@@ -386,7 +386,7 @@ int CMS_verify(CMS_ContentInfo *cms, STACK_OF(X509) *certs,
         tmpin = BIO_new_mem_buf(ptr, len);
         if (tmpin == NULL) {
             CMSerr(CMS_F_CMS_VERIFY, ERR_R_MALLOC_FAILURE);
-            return 0;
+            goto err2;
         }
     } else
         tmpin = dcont;
@@ -455,10 +455,9 @@ int CMS_verify(CMS_ContentInfo *cms, STACK_OF(X509) *certs,
     if (out != tmpout)
         BIO_free_all(tmpout);
 
-    if (cms_certs)
-        sk_X509_pop_free(cms_certs, X509_free);
-    if (crls)
-        sk_X509_CRL_pop_free(crls, X509_CRL_free);
+ err2:
+    sk_X509_pop_free(cms_certs, X509_free);
+    sk_X509_CRL_pop_free(crls, X509_CRL_free);
 
     return ret;
 }
@@ -514,8 +513,7 @@ CMS_ContentInfo *CMS_sign(X509 *signcert, EVP_PKEY *pkey,
     CMSerr(CMS_F_CMS_SIGN, ERR_R_MALLOC_FAILURE);
 
  err:
-    if (cms)
-        CMS_ContentInfo_free(cms);
+    CMS_ContentInfo_free(cms);
     return NULL;
 }
 
@@ -616,8 +614,7 @@ CMS_ContentInfo *CMS_encrypt(STACK_OF(X509) *certs, BIO *data,
  merr:
     CMSerr(CMS_F_CMS_ENCRYPT, ERR_R_MALLOC_FAILURE);
  err:
-    if (cms)
-        CMS_ContentInfo_free(cms);
+    CMS_ContentInfo_free(cms);
     return NULL;
 }
 
@@ -805,8 +802,9 @@ int CMS_final(CMS_ContentInfo *cms, BIO *data, BIO *dcont, unsigned int flags)
 {
     BIO *cmsbio;
     int ret = 0;
-    if (!(cmsbio = CMS_dataInit(cms, dcont))) {
-        CMSerr(CMS_F_CMS_FINAL, ERR_R_MALLOC_FAILURE);
+
+    if ((cmsbio = CMS_dataInit(cms, dcont)) == NULL) {
+        CMSerr(CMS_F_CMS_FINAL, CMS_R_CMS_LIB);
         return 0;
     }
 

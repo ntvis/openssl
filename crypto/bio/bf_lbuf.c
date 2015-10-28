@@ -58,7 +58,7 @@
 
 #include <stdio.h>
 #include <errno.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 
@@ -104,10 +104,10 @@ static int linebuffer_new(BIO *bi)
 {
     BIO_LINEBUFFER_CTX *ctx;
 
-    ctx = (BIO_LINEBUFFER_CTX *)OPENSSL_malloc(sizeof(BIO_LINEBUFFER_CTX));
+    ctx = OPENSSL_malloc(sizeof(*ctx));
     if (ctx == NULL)
         return (0);
-    ctx->obuf = (char *)OPENSSL_malloc(DEFAULT_LINEBUFFER_SIZE);
+    ctx->obuf = OPENSSL_malloc(DEFAULT_LINEBUFFER_SIZE);
     if (ctx->obuf == NULL) {
         OPENSSL_free(ctx);
         return (0);
@@ -128,8 +128,7 @@ static int linebuffer_free(BIO *a)
     if (a == NULL)
         return (0);
     b = (BIO_LINEBUFFER_CTX *)a->ptr;
-    if (b->obuf != NULL)
-        OPENSSL_free(b->obuf);
+    OPENSSL_free(b->obuf);
     OPENSSL_free(a->ptr);
     a->ptr = NULL;
     a->init = 0;
@@ -278,7 +277,7 @@ static long linebuffer_ctrl(BIO *b, int cmd, long num, void *ptr)
         obs = (int)num;
         p = ctx->obuf;
         if ((obs > DEFAULT_LINEBUFFER_SIZE) && (obs != ctx->obuf_size)) {
-            p = (char *)OPENSSL_malloc((int)num);
+            p = OPENSSL_malloc((int)num);
             if (p == NULL)
                 goto malloc_error;
         }

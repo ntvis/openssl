@@ -58,9 +58,10 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
+#include "ext_dat.h"
 
 static BIT_STRING_BITNAME ns_cert_type_table[] = {
     {0, "SSL Client", "client"},
@@ -112,15 +113,15 @@ ASN1_BIT_STRING *v2i_ASN1_BIT_STRING(X509V3_EXT_METHOD *method,
     ASN1_BIT_STRING *bs;
     int i;
     BIT_STRING_BITNAME *bnam;
-    if (!(bs = ASN1_BIT_STRING_new())) {
+    if ((bs = ASN1_BIT_STRING_new()) == NULL) {
         X509V3err(X509V3_F_V2I_ASN1_BIT_STRING, ERR_R_MALLOC_FAILURE);
         return NULL;
     }
     for (i = 0; i < sk_CONF_VALUE_num(nval); i++) {
         val = sk_CONF_VALUE_value(nval, i);
         for (bnam = method->usr_data; bnam->lname; bnam++) {
-            if (!strcmp(bnam->sname, val->name) ||
-                !strcmp(bnam->lname, val->name)) {
+            if (strcmp(bnam->sname, val->name) == 0
+                || strcmp(bnam->lname, val->name) == 0) {
                 if (!ASN1_BIT_STRING_set_bit(bs, bnam->bitnum, 1)) {
                     X509V3err(X509V3_F_V2I_ASN1_BIT_STRING,
                               ERR_R_MALLOC_FAILURE);

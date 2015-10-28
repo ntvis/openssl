@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -64,11 +64,6 @@
 #include "internal/asn1_int.h"
 
 /* CMS EnvelopedData Utilities */
-
-DECLARE_ASN1_ITEM(CMS_EnvelopedData)
-DECLARE_ASN1_ITEM(CMS_KeyTransRecipientInfo)
-DECLARE_ASN1_ITEM(CMS_KEKRecipientInfo)
-DECLARE_ASN1_ITEM(CMS_OtherKeyAttribute)
 
 DECLARE_STACK_OF(CMS_RecipientInfo)
 
@@ -168,8 +163,7 @@ CMS_ContentInfo *CMS_EnvelopedData_create(const EVP_CIPHER *cipher)
         goto merr;
     return cms;
  merr:
-    if (cms)
-        CMS_ContentInfo_free(cms);
+    CMS_ContentInfo_free(cms);
     CMSerr(CMS_F_CMS_ENVELOPEDDATA_CREATE, ERR_R_MALLOC_FAILURE);
     return NULL;
 }
@@ -207,7 +201,7 @@ static int cms_RecipientInfo_ktri_init(CMS_RecipientInfo *ri, X509 *recip,
     if (!cms_set1_SignerIdentifier(ktri->rid, recip, idtype))
         return 0;
 
-    CRYPTO_add(&recip->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(recip);
     CRYPTO_add(&pk->references, 1, CRYPTO_LOCK_EVP_PKEY);
     ktri->pkey = pk;
     ktri->recip = recip;
@@ -277,8 +271,7 @@ CMS_RecipientInfo *CMS_add1_recipient_cert(CMS_ContentInfo *cms,
  merr:
     CMSerr(CMS_F_CMS_ADD1_RECIPIENT_CERT, ERR_R_MALLOC_FAILURE);
  err:
-    if (ri)
-        M_ASN1_free_of(ri, CMS_RecipientInfo);
+    M_ASN1_free_of(ri, CMS_RecipientInfo);
     EVP_PKEY_free(pk);
     return NULL;
 
@@ -401,12 +394,9 @@ static int cms_RecipientInfo_ktri_encrypt(CMS_ContentInfo *cms,
     ret = 1;
 
  err:
-    if (pctx) {
-        EVP_PKEY_CTX_free(pctx);
-        ktri->pctx = NULL;
-    }
-    if (ek)
-        OPENSSL_free(ek);
+    EVP_PKEY_CTX_free(pctx);
+    ktri->pctx = NULL;
+    OPENSSL_free(ek);
     return ret;
 
 }
@@ -466,18 +456,14 @@ static int cms_RecipientInfo_ktri_decrypt(CMS_ContentInfo *cms,
 
     ret = 1;
 
-    if (ec->key) {
-        OPENSSL_cleanse(ec->key, ec->keylen);
-        OPENSSL_free(ec->key);
-    }
-
+    OPENSSL_clear_free(ec->key, ec->keylen);
     ec->key = ek;
     ec->keylen = eklen;
 
  err:
     EVP_PKEY_CTX_free(ktri->pctx);
     ktri->pctx = NULL;
-    if (!ret && ek)
+    if (!ret)
         OPENSSL_free(ek);
 
     return ret;
@@ -616,8 +602,7 @@ CMS_RecipientInfo *CMS_add0_recipient_key(CMS_ContentInfo *cms, int nid,
  merr:
     CMSerr(CMS_F_CMS_ADD0_RECIPIENT_KEY, ERR_R_MALLOC_FAILURE);
  err:
-    if (ri)
-        M_ASN1_free_of(ri, CMS_RecipientInfo);
+    M_ASN1_free_of(ri, CMS_RecipientInfo);
     return NULL;
 
 }
@@ -718,7 +703,7 @@ static int cms_RecipientInfo_kekri_encrypt(CMS_ContentInfo *cms,
 
  err:
 
-    if (!r && wkey)
+    if (!r)
         OPENSSL_free(wkey);
     OPENSSL_cleanse(&actx, sizeof(actx));
 
@@ -791,7 +776,7 @@ static int cms_RecipientInfo_kekri_decrypt(CMS_ContentInfo *cms,
 
  err:
 
-    if (!r && ukey)
+    if (!r)
         OPENSSL_free(ukey);
     OPENSSL_cleanse(&actx, sizeof(actx));
 
@@ -939,12 +924,9 @@ BIO *cms_EnvelopedData_init_bio(CMS_ContentInfo *cms)
 
  err:
     ec->cipher = NULL;
-    if (ec->key) {
-        OPENSSL_cleanse(ec->key, ec->keylen);
-        OPENSSL_free(ec->key);
-        ec->key = NULL;
-        ec->keylen = 0;
-    }
+    OPENSSL_clear_free(ec->key, ec->keylen);
+    ec->key = NULL;
+    ec->keylen = 0;
     if (ok)
         return ret;
     BIO_free(ret);

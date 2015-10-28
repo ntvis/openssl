@@ -518,10 +518,12 @@ case "$GUESSOS" in
 	ISA64=`(sysctl -n hw.optional.x86_64) 2>/dev/null`
 	if [ "$ISA64" = "1" -a -z "$KERNEL_BITS" ]; then
 	    echo "WARNING! If you wish to build 64-bit library, then you have to"
-	    echo "         invoke './Configure darwin64-x86_64-cc' *manually*."
+	    echo "         invoke './Configure darwin64-x86_64-cc $options' *manually*."
 	    if [ "$TEST" = "false" -a -t 1 ]; then
 	      echo "         You have about 5 seconds to press Ctrl-C to abort."
-	      (trap "stty `stty -g`" 2 0; stty -icanon min 0 time 50; read waste) <&1
+	      # The stty technique used elsewhere doesn't work on
+	      # MacOS. At least, right now on this Mac.
+	      sleep 5
 	    fi
 	fi
 	if [ "$ISA64" = "1" -a "$KERNEL_BITS" = "64" ]; then
@@ -870,27 +872,6 @@ do
     options="$options no-$i"
   fi
 done
-
-# Discover Kerberos 5 (since it's still a prototype, we don't
-# do any guesses yet, that's why this section is commented away.
-#if [ -d /usr/kerberos ]; then
-#    krb5_dir=/usr/kerberos
-#    if [ \( -f $krb5_dir/lib/libgssapi_krb5.a -o -f $krb5_dir/lib/libgssapi_krb5.so* \)\
-#	-a \( -f $krb5_dir/lib/libkrb5.a -o -f $krb5_dir/lib/libkrb5.so* \)\
-#	-a \( -f $krb5_dir/lib/libcom_err.a -o -f $krb5_dir/lib/libcom_err.so* \)\
-#	-a \( -f $krb5_dir/lib/libk5crypto.a -o -f $krb5_dir/lib/libk5crypto.so* \)\
-#	-a \( -f $krb5_dir/include/krb5.h \) ]; then
-#	options="$options --with-krb5-flavor=MIT"
-#    fi
-#elif [ -d /usr/heimdal ]; then
-#    krb5_dir=/usr/heimdal
-#    if [ \( -f $krb5_dir/lib/libgssapi.a -o -f $krb5_dir/lib/libgssapi.so* \)\
-#	-a \( -f $krb5_dir/lib/libkrb5.a -o -f $krb5_dir/lib/libkrb5.so* \)\
-#	-a \( -f $krb5_dir/lib/libcom_err.a -o -f $krb5_dir/lib/libcom_err.so* \)\
-#	-a \( -f $krb5_dir/include/krb5.h \) ]; then
-#	options="$options --with-krb5-flavor=Heimdal"
-#    fi
-#fi
 
 if [ -z "$OUT" ]; then
   OUT="$CC"

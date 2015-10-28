@@ -72,7 +72,7 @@
 #include <ctype.h>
 #include <assert.h>
 #include <limits.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #ifndef NO_SYS_TYPES_H
 # include <sys/types.h>
 #endif
@@ -370,7 +370,7 @@ _dopr(char **sbuffer,
                        flags, min, max);
                 break;
             case 'p':
-                value = (long)va_arg(args, void *);
+                value = (size_t)va_arg(args, void *);
                 fmtint(sbuffer, buffer, &currlen, maxlen,
                        value, 16, min, max, flags | DP_F_NUM);
                 break;
@@ -704,32 +704,29 @@ doapr_outch(char **sbuffer,
     /* If we haven't at least one buffer, someone has doe a big booboo */
     assert(*sbuffer != NULL || buffer != NULL);
 
-    if (buffer) {
-        while (*currlen >= *maxlen) {
-            if (*buffer == NULL) {
-                if (*maxlen == 0)
-                    *maxlen = 1024;
-                *buffer = OPENSSL_malloc(*maxlen);
-                if (!*buffer) {
-                    /* Panic! Can't really do anything sensible. Just return */
-                    return;
-                }
-                if (*currlen > 0) {
-                    assert(*sbuffer != NULL);
-                    memcpy(*buffer, *sbuffer, *currlen);
-                }
-                *sbuffer = NULL;
-            } else {
-                *maxlen += 1024;
-                *buffer = OPENSSL_realloc(*buffer, *maxlen);
-                if (!*buffer) {
-                    /* Panic! Can't really do anything sensible. Just return */
-                    return;
-                }
+    /* |currlen| must always be <= |*maxlen| */
+    assert(*currlen <= *maxlen);
+
+    if (buffer && *currlen == *maxlen) {
+        *maxlen += 1024;
+        if (*buffer == NULL) {
+            *buffer = OPENSSL_malloc(*maxlen);
+            if (!*buffer) {
+                /* Panic! Can't really do anything sensible. Just return */
+                return;
+            }
+            if (*currlen > 0) {
+                assert(*sbuffer != NULL);
+                memcpy(*buffer, *sbuffer, *currlen);
+            }
+            *sbuffer = NULL;
+        } else {
+            *buffer = OPENSSL_realloc(*buffer, *maxlen);
+            if (!*buffer) {
+                /* Panic! Can't really do anything sensible. Just return */
+                return;
             }
         }
-        /* What to do if *buffer is NULL? */
-        assert(*sbuffer != NULL || *buffer != NULL);
     }
 
     if (*currlen < *maxlen) {

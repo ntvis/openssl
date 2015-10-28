@@ -60,7 +60,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/dso.h>
 #include <openssl/x509.h>
@@ -266,8 +266,7 @@ static CONF_MODULE *module_load_dso(const CONF *cnf, char *name, char *value,
     return md;
 
  err:
-    if (dso)
-        DSO_free(dso);
+    DSO_free(dso);
     CONFerr(CONF_F_MODULE_LOAD_DSO, errcode);
     ERR_add_error_data(4, "module=", name, ", path=", path);
     return NULL;
@@ -282,7 +281,7 @@ static CONF_MODULE *module_add(DSO *dso, const char *name,
         supported_modules = sk_CONF_MODULE_new_null();
     if (supported_modules == NULL)
         return NULL;
-    tmod = OPENSSL_malloc(sizeof(CONF_MODULE));
+    tmod = OPENSSL_zalloc(sizeof(*tmod));
     if (tmod == NULL)
         return NULL;
 
@@ -290,7 +289,6 @@ static CONF_MODULE *module_add(DSO *dso, const char *name,
     tmod->name = BUF_strdup(name);
     tmod->init = ifunc;
     tmod->finish = ffunc;
-    tmod->links = 0;
 
     if (!sk_CONF_MODULE_push(supported_modules, tmod)) {
         OPENSSL_free(tmod);
@@ -320,7 +318,7 @@ static CONF_MODULE *module_find(char *name)
 
     for (i = 0; i < sk_CONF_MODULE_num(supported_modules); i++) {
         tmod = sk_CONF_MODULE_value(supported_modules, i);
-        if (!strncmp(tmod->name, name, nchar))
+        if (strncmp(tmod->name, name, nchar) == 0)
             return tmod;
     }
 
@@ -337,7 +335,7 @@ static int module_init(CONF_MODULE *pmod, char *name, char *value,
     CONF_IMODULE *imod = NULL;
 
     /* Otherwise add initialized module to list */
-    imod = OPENSSL_malloc(sizeof(CONF_IMODULE));
+    imod = OPENSSL_malloc(sizeof(*imod));
     if (!imod)
         goto err;
 
@@ -383,10 +381,8 @@ static int module_init(CONF_MODULE *pmod, char *name, char *value,
 
  memerr:
     if (imod) {
-        if (imod->name)
-            OPENSSL_free(imod->name);
-        if (imod->value)
-            OPENSSL_free(imod->value);
+        OPENSSL_free(imod->name);
+        OPENSSL_free(imod->value);
         OPENSSL_free(imod);
     }
 
@@ -424,8 +420,7 @@ void CONF_modules_unload(int all)
 /* unload a single module */
 static void module_free(CONF_MODULE *md)
 {
-    if (md->dso)
-        DSO_free(md->dso);
+    DSO_free(md->dso);
     OPENSSL_free(md->name);
     OPENSSL_free(md);
 }
@@ -447,6 +442,8 @@ void CONF_modules_finish(void)
 
 static void module_finish(CONF_IMODULE *imod)
 {
+    if (!imod)
+        return;
     if (imod->pmod->finish)
         imod->pmod->finish(imod);
     imod->pmod->links--;

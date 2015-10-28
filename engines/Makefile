@@ -3,7 +3,7 @@
 #
 
 #The following engines have been disabled as they currently do not build
-# aep atalla cswift chil nuron sureware ubsec
+# sureware ubsec
 
 DIR=	engines
 TOP=	..
@@ -31,27 +31,26 @@ AFLAGS= $(ASFLAGS)
 GENERAL=Makefile engines.com install.com engine_vector.mar
 
 LIB=$(TOP)/libcrypto.a
-LIBNAMES= 4758cca gmp padlock capi
-
-LIBSRC=	e_4758cca.c \
-	e_gmp.c \
+LIBNAMES= gmp padlock capi
+LIBSRC=	e_gmp.c \
 	e_padlock.c \
 	e_capi.c
-LIBOBJ= e_4758cca.o \
-	e_gmp.o \
+LIBOBJ= e_gmp.o \
 	e_padlock.o \
 	e_capi.o \
 	$(ENGINES_ASM_OBJ)
 
+TESTLIBNAMES= ossltest
+TESTLIBSRC= e_ossltest.c
+TESTLIBOBJ= e_ossltest.o
+
 SRC= $(LIBSRC)
 
-HEADER=	e_4758cca_err.c e_4758cca_err.h \
-	e_gmp_err.c e_gmp_err.h \
+HEADER=	e_gmp_err.c e_gmp_err.h \
 	e_chil_err.c e_chil_err.h \
-	e_nuron_err.c e_nuron_err.h \
-	e_sureware_err.c e_sureware_err.h \
 	e_ubsec_err.c e_ubsec_err.h \
-	e_capi_err.c e_capi_err.h
+	e_capi_err.c e_capi_err.h \
+	e_ossltest_err.c e_ossltest_err.h
 
 ALL=	$(GENERAL) $(SRC) $(HEADER)
 
@@ -60,10 +59,10 @@ top:
 
 all:	lib subdirs
 
-lib:	$(LIBOBJ)
+lib:	$(LIBOBJ) $(TESTLIBOBJ)
 	@if [ -n "$(SHARED_LIBS)" ]; then \
 		set -e; \
-		for l in $(LIBNAMES); do \
+		for l in $(LIBNAMES) $(TESTLIBNAMES); do \
 			$(MAKE) -f ../Makefile.shared -e \
 				LIBNAME=$$l LIBEXTRAS="e_$$l*.o" \
 				LIBDEPS='-L.. -lcrypto $(EX_LIBS)' \
@@ -134,12 +133,15 @@ lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
 	@target=lint; $(RECURSIVE_MAKE)
 
-depend:
-	@if [ -z "$(THIS)" ]; then \
-	    $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; \
-	fi
-	@[ -z "$(THIS)" ] || $(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
+update: local_depend
+	@if [ -z "$(THIS)" ]; then $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; fi
+	@[ -z "$(THIS)" ] || (set -e; target=update; $(RECURSIVE_MAKE) )
+
+depend: local_depend
+	@if [ -z "$(THIS)" ]; then $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; fi
 	@[ -z "$(THIS)" ] || (set -e; target=depend; $(RECURSIVE_MAKE) )
+local_depend:
+	@[ -z "$(THIS)" ] || $(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC) $(TESTLIBSRC)
 
 dclean:
 	$(PERL) -pe 'if (/^# DO NOT DELETE THIS LINE/) {print; exit(0);}' $(MAKEFILE) >Makefile.new
@@ -147,27 +149,11 @@ dclean:
 	@target=dclean; $(RECURSIVE_MAKE)
 
 clean:
-	rm -f *.o *.obj lib tags core .pure .nfs* *.old *.bak fluff
+	rm -f *.s *.o *.obj lib tags core .pure .nfs* *.old *.bak fluff
 	@target=clean; $(RECURSIVE_MAKE)
 
 # DO NOT DELETE THIS LINE -- make depend depends on it.
 
-e_4758cca.o: ../include/openssl/asn1.h ../include/openssl/bio.h
-e_4758cca.o: ../include/openssl/bn.h ../include/openssl/buffer.h
-e_4758cca.o: ../include/openssl/crypto.h ../include/openssl/dso.h
-e_4758cca.o: ../include/openssl/e_os2.h ../include/openssl/ec.h
-e_4758cca.o: ../include/openssl/ecdh.h ../include/openssl/ecdsa.h
-e_4758cca.o: ../include/openssl/engine.h ../include/openssl/err.h
-e_4758cca.o: ../include/openssl/evp.h ../include/openssl/lhash.h
-e_4758cca.o: ../include/openssl/obj_mac.h ../include/openssl/objects.h
-e_4758cca.o: ../include/openssl/opensslconf.h ../include/openssl/opensslv.h
-e_4758cca.o: ../include/openssl/ossl_typ.h ../include/openssl/pkcs7.h
-e_4758cca.o: ../include/openssl/rand.h ../include/openssl/rsa.h
-e_4758cca.o: ../include/openssl/safestack.h ../include/openssl/sha.h
-e_4758cca.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
-e_4758cca.o: ../include/openssl/x509.h ../include/openssl/x509_vfy.h
-e_4758cca.o: e_4758cca.c e_4758cca_err.c e_4758cca_err.h
-e_4758cca.o: vendor_defns/hw_4758_cca.h
 e_capi.o: ../include/openssl/asn1.h ../include/openssl/bio.h
 e_capi.o: ../include/openssl/buffer.h ../include/openssl/crypto.h
 e_capi.o: ../include/openssl/e_os2.h ../include/openssl/ec.h
@@ -193,6 +179,21 @@ e_gmp.o: ../include/openssl/rsa.h ../include/openssl/safestack.h
 e_gmp.o: ../include/openssl/sha.h ../include/openssl/stack.h
 e_gmp.o: ../include/openssl/symhacks.h ../include/openssl/x509.h
 e_gmp.o: ../include/openssl/x509_vfy.h e_gmp.c
+e_ossltest.o: ../include/openssl/aes.h ../include/openssl/asn1.h
+e_ossltest.o: ../include/openssl/bio.h ../include/openssl/buffer.h
+e_ossltest.o: ../include/openssl/crypto.h ../include/openssl/e_os2.h
+e_ossltest.o: ../include/openssl/ec.h ../include/openssl/ecdh.h
+e_ossltest.o: ../include/openssl/ecdsa.h ../include/openssl/engine.h
+e_ossltest.o: ../include/openssl/err.h ../include/openssl/evp.h
+e_ossltest.o: ../include/openssl/lhash.h ../include/openssl/md5.h
+e_ossltest.o: ../include/openssl/modes.h ../include/openssl/obj_mac.h
+e_ossltest.o: ../include/openssl/objects.h ../include/openssl/opensslconf.h
+e_ossltest.o: ../include/openssl/opensslv.h ../include/openssl/ossl_typ.h
+e_ossltest.o: ../include/openssl/pkcs7.h ../include/openssl/rsa.h
+e_ossltest.o: ../include/openssl/safestack.h ../include/openssl/sha.h
+e_ossltest.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
+e_ossltest.o: ../include/openssl/x509.h ../include/openssl/x509_vfy.h
+e_ossltest.o: e_ossltest.c e_ossltest_err.c e_ossltest_err.h
 e_padlock.o: ../include/openssl/aes.h ../include/openssl/asn1.h
 e_padlock.o: ../include/openssl/bio.h ../include/openssl/buffer.h
 e_padlock.o: ../include/openssl/crypto.h ../include/openssl/dso.h

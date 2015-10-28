@@ -57,7 +57,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
@@ -184,7 +184,9 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
      * explicit_policy value at this point.
      */
     for (i = n - 2; i >= 0; i--) {
+        uint32_t ex_flags;
         x = sk_X509_value(certs, i);
+        ex_flags = X509_get_extension_flags(x);
         X509_check_purpose(x, -1, -1);
         cache = policy_cache_set(x);
         /* If cache NULL something bad happened: return immediately */
@@ -193,7 +195,7 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
         /*
          * If inconsistent extensions keep a note of it but continue
          */
-        if (x->ex_flags & EXFLAG_INVALID_POLICY)
+        if (ex_flags & EXFLAG_INVALID_POLICY)
             ret = -1;
         /*
          * Otherwise if we have no data (hence no CertificatePolicies) and
@@ -202,7 +204,7 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
         else if ((ret == 1) && !cache->data)
             ret = 2;
         if (explicit_policy > 0) {
-            if (!(x->ex_flags & EXFLAG_SI))
+            if (!(ex_flags & EXFLAG_SI))
                 explicit_policy--;
             if ((cache->explicit_skip != -1)
                 && (cache->explicit_skip < explicit_policy))
@@ -217,42 +219,30 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
     }
 
     /* If we get this far initialize the tree */
-
-    tree = OPENSSL_malloc(sizeof(X509_POLICY_TREE));
-
+    tree = OPENSSL_zalloc(sizeof(*tree));
     if (!tree)
         return 0;
-
-    tree->flags = 0;
-    tree->levels = OPENSSL_malloc(sizeof(X509_POLICY_LEVEL) * n);
-    tree->nlevel = 0;
-    tree->extra_data = NULL;
-    tree->auth_policies = NULL;
-    tree->user_policies = NULL;
-
+    tree->levels = OPENSSL_zalloc(sizeof(*tree->levels) * n);
     if (!tree->levels) {
         OPENSSL_free(tree);
         return 0;
     }
-
-    memset(tree->levels, 0, n * sizeof(X509_POLICY_LEVEL));
-
     tree->nlevel = n;
-
     level = tree->levels;
 
     /* Root data: initialize to anyPolicy */
-
     data = policy_data_new(NULL, OBJ_nid2obj(NID_any_policy), 0);
 
     if (!data || !level_add_node(level, data, NULL, tree))
         goto bad_tree;
 
     for (i = n - 2; i >= 0; i--) {
+        uint32_t ex_flags;
         level++;
         x = sk_X509_value(certs, i);
+        ex_flags = X509_get_extension_flags(x);
         cache = policy_cache_set(x);
-        CRYPTO_add(&x->references, 1, CRYPTO_LOCK_X509);
+        X509_up_ref(x);
         level->cert = x;
 
         if (!cache->anyPolicy)
@@ -264,10 +254,10 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
              * Any matching allowed if certificate is self issued and not the
              * last in the chain.
              */
-            if (!(x->ex_flags & EXFLAG_SI) || (i == 0))
+            if (!(ex_flags & EXFLAG_SI) || (i == 0))
                 level->flags |= X509_V_FLAG_INHIBIT_ANY;
         } else {
-            if (!(x->ex_flags & EXFLAG_SI))
+            if (!(ex_flags & EXFLAG_SI))
                 any_skip--;
             if ((cache->any_skip >= 0)
                 && (cache->any_skip < any_skip))
@@ -277,7 +267,7 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
         if (map_skip == 0)
             level->flags |= X509_V_FLAG_INHIBIT_MAP;
         else {
-            if (!(x->ex_flags & EXFLAG_SI))
+            if (!(ex_flags & EXFLAG_SI))
                 map_skip--;
             if ((cache->map_skip >= 0)
                 && (cache->map_skip < map_skip))
@@ -535,7 +525,7 @@ static int tree_calculate_authority_set(X509_POLICY_TREE *tree,
          * If no anyPolicy node on this this level it can't appear on lower
          * levels so end search.
          */
-        if (!(anyptr = curr->anyPolicy))
+        if ((anyptr = curr->anyPolicy) == NULL)
             break;
         curr++;
         for (j = 0; j < sk_X509_POLICY_NODE_num(curr->nodes); j++) {
@@ -655,17 +645,12 @@ void X509_policy_tree_free(X509_POLICY_TREE *tree)
     sk_X509_POLICY_NODE_pop_free(tree->user_policies, exnode_free);
 
     for (i = 0, curr = tree->levels; i < tree->nlevel; i++, curr++) {
-        if (curr->cert)
-            X509_free(curr->cert);
-        if (curr->nodes)
-            sk_X509_POLICY_NODE_pop_free(curr->nodes, policy_node_free);
-        if (curr->anyPolicy)
-            policy_node_free(curr->anyPolicy);
+        X509_free(curr->cert);
+        sk_X509_POLICY_NODE_pop_free(curr->nodes, policy_node_free);
+        policy_node_free(curr->anyPolicy);
     }
 
-    if (tree->extra_data)
-        sk_X509_POLICY_DATA_pop_free(tree->extra_data, policy_data_free);
-
+    sk_X509_POLICY_DATA_pop_free(tree->extra_data, policy_data_free);
     OPENSSL_free(tree->levels);
     OPENSSL_free(tree);
 

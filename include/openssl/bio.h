@@ -178,6 +178,8 @@ extern "C" {
 
 # define BIO_CTRL_DGRAM_GET_MTU_OVERHEAD   49
 
+# define BIO_CTRL_DGRAM_SET_PEEK_MODE      50
+
 # ifndef OPENSSL_NO_SCTP
 /* SCTP stuff */
 #  define BIO_CTRL_DGRAM_SCTP_SET_IN_HANDSHAKE    50
@@ -211,21 +213,6 @@ extern "C" {
  */
 #  define BIO_FLAGS_UPLINK        0
 # endif
-
-/* Used in BIO_gethostbyname() */
-# define BIO_GHBN_CTRL_HITS              1
-# define BIO_GHBN_CTRL_MISSES            2
-# define BIO_GHBN_CTRL_CACHE_SIZE        3
-# define BIO_GHBN_CTRL_GET_ENTRY         4
-# define BIO_GHBN_CTRL_FLUSH             5
-
-/* Mostly used in the SSL BIO */
-/*-
- * Not used anymore
- * #define BIO_FLAGS_PROTOCOL_DELAYED_READ 0x10
- * #define BIO_FLAGS_PROTOCOL_DELAYED_WRITE 0x20
- * #define BIO_FLAGS_PROTOCOL_STARTUP   0x40
- */
 
 # define BIO_FLAGS_BASE64_NO_NL  0x100
 
@@ -291,7 +278,7 @@ void BIO_clear_flags(BIO *b, int flags);
  * BIO_CB_RETURN flag indicates if it is after the call
  */
 # define BIO_CB_RETURN   0x80
-# define BIO_CB_return(a) ((a)|BIO_CB_RETURN))
+# define BIO_CB_return(a) ((a)|BIO_CB_RETURN)
 # define BIO_cb_pre(a)   (!((a)&BIO_CB_RETURN))
 # define BIO_cb_post(a)  ((a)&BIO_CB_RETURN)
 
@@ -336,8 +323,8 @@ struct bio_st {
     struct bio_st *next_bio;    /* used by filter BIOs */
     struct bio_st *prev_bio;    /* used by filter BIOs */
     int references;
-    unsigned long num_read;
-    unsigned long num_write;
+    uint64_t num_read;
+    uint64_t num_write;
     CRYPTO_EX_DATA ex_data;
 };
 
@@ -633,8 +620,8 @@ int BIO_set_ex_data(BIO *bio, int idx, void *data);
 void *BIO_get_ex_data(BIO *bio, int idx);
 int BIO_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
                          CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
-unsigned long BIO_number_read(BIO *bio);
-unsigned long BIO_number_written(BIO *bio);
+uint64_t BIO_number_read(BIO *bio);
+uint64_t BIO_number_written(BIO *bio);
 
 /* For BIO_f_asn1() */
 int BIO_asn1_set_prefix(BIO *b, asn1_ps_func *prefix,
@@ -646,11 +633,10 @@ int BIO_asn1_set_suffix(BIO *b, asn1_ps_func *suffix,
 int BIO_asn1_get_suffix(BIO *b, asn1_ps_func **psuffix,
                         asn1_ps_func **psuffix_free);
 
-# ifndef OPENSSL_NO_STDIO
 BIO_METHOD *BIO_s_file(void);
 BIO *BIO_new_file(const char *filename, const char *mode);
+# ifndef OPENSSL_NO_STDIO
 BIO *BIO_new_fp(FILE *stream, int close_flag);
-#  define BIO_s_file_internal    BIO_s_file
 # endif
 BIO *BIO_new(BIO_METHOD *type);
 int BIO_set(BIO *a, BIO_METHOD *type);
@@ -685,6 +671,7 @@ long BIO_debug_callback(BIO *bio, int cmd, const char *argp, int argi,
                         long argl, long ret);
 
 BIO_METHOD *BIO_s_mem(void);
+BIO_METHOD *BIO_s_secmem(void);
 BIO *BIO_new_mem_buf(void *buf, int len);
 BIO_METHOD *BIO_s_socket(void);
 BIO_METHOD *BIO_s_connect(void);

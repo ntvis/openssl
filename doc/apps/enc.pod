@@ -53,7 +53,7 @@ the output filename, standard output by default.
 =item B<-pass arg>
 
 the password source. For more information about the format of B<arg>
-see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)|openssl(1)>.
+see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)>.
 
 =item B<-salt>
 
@@ -170,7 +170,7 @@ configuration file is read and any ENGINEs loaded.
 Engines which provide entirely new encryption algorithms (such as ccgost
 engine which provides gost89 algorithm) should be configured in the
 configuration file. Engines, specified in the command line using -engine
-options can only be used for hadrware-assisted implementations of
+options can only be used for hardware-assisted implementations of
 ciphers, which are supported by OpenSSL core or other engine, specified
 in the configuration file.
 
@@ -212,7 +212,7 @@ Note that some of these ciphers can be disabled at compile time
 and some are available only if an appropriate engine is configured
 in the configuration file. The output of the B<enc> command run with
 unsupported options (for example B<openssl enc -help>) includes a
-list of ciphers, supported by your versesion of OpenSSL, including
+list of ciphers, supported by your version of OpenSSL, including
 ones provided by configured engines.
 
 The B<enc> program does not support authenticated encryption modes
@@ -282,7 +282,7 @@ authentication tag.
  rc5-ofb            RC5 cipher in OFB mode
 
  aes-[128|192|256]-cbc	128/192/256 bit AES in CBC mode
- aes-[128|192|256]	Alias for aes-[128|192|256]-cbc
+ aes[128|192|256]	Alias for aes-[128|192|256]-cbc
  aes-[128|192|256]-cfb	128/192/256 bit AES in 128 bit CFB mode
  aes-[128|192|256]-cfb1	128/192/256 bit AES in 1 bit CFB mode
  aes-[128|192|256]-cfb8	128/192/256 bit AES in 8 bit CFB mode

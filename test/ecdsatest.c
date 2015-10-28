@@ -107,8 +107,8 @@ int change_rand(void);
 int restore_rand(void);
 int fbytes(unsigned char *buf, int num);
 
-RAND_METHOD fake_rand;
-const RAND_METHOD *old_rand;
+static RAND_METHOD fake_rand;
+static const RAND_METHOD *old_rand;
 
 int change_rand(void)
 {
@@ -241,17 +241,12 @@ int x9_62_test_internal(BIO *out, int nid, const char *r_in, const char *s_in)
     if (!ret)
         BIO_printf(out, " failed\n");
     EC_KEY_free(key);
-    if (signature)
-        ECDSA_SIG_free(signature);
-    if (r)
-        BN_free(r);
-    if (s)
-        BN_free(s);
+    ECDSA_SIG_free(signature);
+    BN_free(r);
+    BN_free(s);
     EVP_MD_CTX_cleanup(&md_ctx);
-    if (kinv)
-        BN_clear_free(kinv);
-    if (rp)
-        BN_clear_free(rp);
+    BN_clear_free(kinv);
+    BN_clear_free(rp);
     return ret;
 }
 
@@ -323,9 +318,7 @@ int test_builtin(BIO *out)
 
     /* get a list of all internal curves */
     crv_len = EC_get_builtin_curves(NULL, 0);
-
-    curves = OPENSSL_malloc(sizeof(EC_builtin_curve) * crv_len);
-
+    curves = OPENSSL_malloc(sizeof(*curves) * crv_len);
     if (curves == NULL) {
         BIO_printf(out, "malloc error\n");
         goto builtin_err;
@@ -447,10 +440,8 @@ int test_builtin(BIO *out)
             goto builtin_err;
         }
         buf_len = 2 * bn_len;
-        if ((raw_buf = OPENSSL_malloc(buf_len)) == NULL)
+        if ((raw_buf = OPENSSL_zalloc(buf_len)) == NULL)
             goto builtin_err;
-        /* Pad the bignums with leading zeroes. */
-        memset(raw_buf, 0, buf_len);
         BN_bn2bin(ecdsa_sig->r, raw_buf + bn_len - r_len);
         BN_bn2bin(ecdsa_sig->s, raw_buf + buf_len - s_len);
 
@@ -506,14 +497,10 @@ int test_builtin(BIO *out)
  builtin_err:
     EC_KEY_free(eckey);
     EC_KEY_free(wrong_eckey);
-    if (ecdsa_sig)
-        ECDSA_SIG_free(ecdsa_sig);
-    if (signature)
-        OPENSSL_free(signature);
-    if (raw_buf)
-        OPENSSL_free(raw_buf);
-    if (curves)
-        OPENSSL_free(curves);
+    ECDSA_SIG_free(ecdsa_sig);
+    OPENSSL_free(signature);
+    OPENSSL_free(raw_buf);
+    OPENSSL_free(curves);
 
     return ret;
 }
@@ -523,7 +510,7 @@ int main(void)
     int ret = 1;
     BIO *out;
 
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
+    out = BIO_new_fp(stdout, BIO_NOCLOSE | BIO_FP_TEXT);
 
     /* enable memory leak checking unless explicitly disabled */
     if (!((getenv("OPENSSL_DEBUG_MEMORY") != NULL) &&

@@ -7,7 +7,6 @@
  *          Requires OpenSSL 0.9.9 for compilation                    *
  **********************************************************************/
 #include "gost_lcl.h"
-#include "gost_params.h"
 #include <string.h>
 #include <openssl/rand.h>
 #include <openssl/ecdsa.h>
@@ -109,12 +108,11 @@ int fill_GOST2001_params(EC_KEY *eckey, int nid)
     }
     ok = 1;
  err:
-    if (P) EC_POINT_free(P);
-    if (grp) EC_GROUP_free(grp);
-    if (ctx) {
+    EC_POINT_free(P);
+    EC_GROUP_free(grp);
+    if (ctx)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
+    BN_CTX_free(ctx);
     return ok;
 }
 
@@ -241,15 +239,13 @@ DSA_SIG *gost2001_do_sign(const unsigned char *dgst, int dlen, EC_KEY *eckey)
 
     ret = newsig;
  err:
-    if (ctx) {
+    if (ctx)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (C) EC_POINT_free(C);
-    if (md) BN_free(md);
-    if (!ret && newsig) {
+    BN_CTX_free(ctx);
+    EC_POINT_free(C);
+    BN_free(md);
+    if (!ret)
         DSA_SIG_free(newsig);
-    }
     return ret;
 }
 
@@ -364,12 +360,11 @@ int gost2001_do_verify(const unsigned char *dgst, int dgst_len,
         ok = 1;
     }
  err:
-    if (C) EC_POINT_free(C);
-    if (ctx) {
+    EC_POINT_free(C);
+    if (ctx)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (md) BN_free(md);
+    BN_CTX_free(ctx);
+    BN_free(md);
     return ok;
 }
 
@@ -397,7 +392,7 @@ int gost2001_compute_public(EC_KEY *ec)
         goto err;
     }
     BN_CTX_start(ctx);
-    if (!(priv_key = EC_KEY_get0_private_key(ec))) {
+    if ((priv_key = EC_KEY_get0_private_key(ec)) == NULL) {
         GOSTerr(GOST_F_GOST2001_COMPUTE_PUBLIC, ERR_R_EC_LIB);
         goto err;
     }
@@ -417,11 +412,10 @@ int gost2001_compute_public(EC_KEY *ec)
     }
     ok = 256;
  err:
-    if (pub_key) EC_POINT_free(pub_key);
-    if (ctx) {
+    EC_POINT_free(pub_key);
+    if (ctx)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
+    BN_CTX_free(ctx);
     return ok;
 }
 

@@ -58,7 +58,7 @@
 
 #include <stdio.h>
 #include <openssl/stack.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/objects.h>
 #include <openssl/evp.h>
@@ -147,10 +147,8 @@ STACK_OF(X509_ATTRIBUTE) *X509at_add1_attr(STACK_OF(X509_ATTRIBUTE) **x,
  err:
     X509err(X509_F_X509AT_ADD1_ATTR, ERR_R_MALLOC_FAILURE);
  err2:
-    if (new_attr != NULL)
-        X509_ATTRIBUTE_free(new_attr);
-    if (sk != NULL)
-        sk_X509_ATTRIBUTE_free(sk);
+    X509_ATTRIBUTE_free(new_attr);
+    sk_X509_ATTRIBUTE_free(sk);
     return (NULL);
 }
 
@@ -311,7 +309,7 @@ int X509_ATTRIBUTE_set1_data(X509_ATTRIBUTE *attr, int attrtype,
         }
         atype = stmp->type;
     } else if (len != -1) {
-        if (!(stmp = ASN1_STRING_type_new(attrtype)))
+        if ((stmp = ASN1_STRING_type_new(attrtype)) == NULL)
             goto err;
         if (!ASN1_STRING_set(stmp, data, len))
             goto err;
@@ -324,7 +322,7 @@ int X509_ATTRIBUTE_set1_data(X509_ATTRIBUTE *attr, int attrtype,
      */
     if (attrtype == 0)
         return 1;
-    if (!(ttmp = ASN1_TYPE_new()))
+    if ((ttmp = ASN1_TYPE_new()) == NULL)
         goto err;
     if ((len == -1) && !(attrtype & MBSTRING_FLAG)) {
         if (!ASN1_TYPE_set1(ttmp, attrtype, data))

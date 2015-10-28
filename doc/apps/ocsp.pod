@@ -25,10 +25,13 @@ B<openssl> B<ocsp>
 [B<-nonce>]
 [B<-no_nonce>]
 [B<-url URL>]
-[B<-host host:n>]
+[B<-host host:port>]
+[B<-header>]
 [B<-path>]
 [B<-CApath dir>]
 [B<-CAfile file>]
+[B<-no-CAfile>]
+[B<-no-CApath>]
 [B<-attime timestamp>]
 [B<-check_ss_sig>]
 [B<-crl_check>]
@@ -161,6 +164,12 @@ if the B<host> option is present then the OCSP request is sent to the host
 B<hostname> on port B<port>. B<path> specifies the HTTP path name to use
 or "/" by default.
 
+=item B<-header name=value>
+
+Adds the header B<name> with the specified B<value> to the OCSP request
+that is sent to the responder.
+This may be repeated.
+
 =item B<-timeout seconds>
 
 connection timeout to the OCSP responder in seconds
@@ -169,6 +178,14 @@ connection timeout to the OCSP responder in seconds
 
 file or pathname containing trusted CA certificates. These are used to verify
 the signature on the OCSP response.
+
+=item B<-no-CAfile>
+
+Do not load the trusted CA certificates from the default file location
+
+=item B<-no-CApath>
+
+Do not load the trusted CA certificates from the default directory location
 
 =item B<-attime>, B<-check_ss_sig>, B<-crl_check>, B<-crl_check_all>,
 B<explicit_policy>, B<-extended_crl>, B<-ignore_critical>, B<-inhibit_any>,
@@ -254,10 +271,12 @@ information is immediately available. In this case the age of the B<notBefore> f
 is checked to see it is not older than B<age> seconds old. By default this additional
 check is not performed.
 
-=item B<-md5|-sha1|-sha256|-ripemod160|...>
+=item B<-[digest]>
 
 this option sets digest algorithm to use for certificate identification
-in the OCSP request. By default SHA-1 is used. 
+in the OCSP request.
+Any digest supported by the OpenSSL B<dgst> command can be used.
+The default is SHA-1.
 
 =back
 

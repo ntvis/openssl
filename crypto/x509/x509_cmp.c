@@ -58,7 +58,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/objects.h>
 #include <openssl/x509.h>
@@ -68,11 +68,11 @@
 int X509_issuer_and_serial_cmp(const X509 *a, const X509 *b)
 {
     int i;
-    X509_CINF *ai, *bi;
+    const X509_CINF *ai, *bi;
 
-    ai = a->cert_info;
-    bi = b->cert_info;
-    i = ASN1_INTEGER_cmp(ai->serialNumber, bi->serialNumber);
+    ai = &a->cert_info;
+    bi = &b->cert_info;
+    i = ASN1_INTEGER_cmp(&ai->serialNumber, &bi->serialNumber);
     if (i)
         return (i);
     return (X509_NAME_cmp(ai->issuer, bi->issuer));
@@ -87,15 +87,15 @@ unsigned long X509_issuer_and_serial_hash(X509 *a)
     char *f;
 
     EVP_MD_CTX_init(&ctx);
-    f = X509_NAME_oneline(a->cert_info->issuer, NULL, 0);
+    f = X509_NAME_oneline(a->cert_info.issuer, NULL, 0);
     if (!EVP_DigestInit_ex(&ctx, EVP_md5(), NULL))
         goto err;
     if (!EVP_DigestUpdate(&ctx, (unsigned char *)f, strlen(f)))
         goto err;
     OPENSSL_free(f);
     if (!EVP_DigestUpdate
-        (&ctx, (unsigned char *)a->cert_info->serialNumber->data,
-         (unsigned long)a->cert_info->serialNumber->length))
+        (&ctx, (unsigned char *)a->cert_info.serialNumber.data,
+         (unsigned long)a->cert_info.serialNumber.length))
         goto err;
     if (!EVP_DigestFinal_ex(&ctx, &(md[0]), NULL))
         goto err;
@@ -110,17 +110,17 @@ unsigned long X509_issuer_and_serial_hash(X509 *a)
 
 int X509_issuer_name_cmp(const X509 *a, const X509 *b)
 {
-    return (X509_NAME_cmp(a->cert_info->issuer, b->cert_info->issuer));
+    return (X509_NAME_cmp(a->cert_info.issuer, b->cert_info.issuer));
 }
 
 int X509_subject_name_cmp(const X509 *a, const X509 *b)
 {
-    return (X509_NAME_cmp(a->cert_info->subject, b->cert_info->subject));
+    return (X509_NAME_cmp(a->cert_info.subject, b->cert_info.subject));
 }
 
 int X509_CRL_cmp(const X509_CRL *a, const X509_CRL *b)
 {
-    return (X509_NAME_cmp(a->crl->issuer, b->crl->issuer));
+    return (X509_NAME_cmp(a->crl.issuer, b->crl.issuer));
 }
 
 int X509_CRL_match(const X509_CRL *a, const X509_CRL *b)
@@ -130,40 +130,40 @@ int X509_CRL_match(const X509_CRL *a, const X509_CRL *b)
 
 X509_NAME *X509_get_issuer_name(X509 *a)
 {
-    return (a->cert_info->issuer);
+    return (a->cert_info.issuer);
 }
 
 unsigned long X509_issuer_name_hash(X509 *x)
 {
-    return (X509_NAME_hash(x->cert_info->issuer));
+    return (X509_NAME_hash(x->cert_info.issuer));
 }
 
 #ifndef OPENSSL_NO_MD5
 unsigned long X509_issuer_name_hash_old(X509 *x)
 {
-    return (X509_NAME_hash_old(x->cert_info->issuer));
+    return (X509_NAME_hash_old(x->cert_info.issuer));
 }
 #endif
 
 X509_NAME *X509_get_subject_name(X509 *a)
 {
-    return (a->cert_info->subject);
+    return (a->cert_info.subject);
 }
 
 ASN1_INTEGER *X509_get_serialNumber(X509 *a)
 {
-    return (a->cert_info->serialNumber);
+    return &a->cert_info.serialNumber;
 }
 
 unsigned long X509_subject_name_hash(X509 *x)
 {
-    return (X509_NAME_hash(x->cert_info->subject));
+    return (X509_NAME_hash(x->cert_info.subject));
 }
 
 #ifndef OPENSSL_NO_MD5
 unsigned long X509_subject_name_hash_old(X509 *x)
 {
-    return (X509_NAME_hash_old(x->cert_info->subject));
+    return (X509_NAME_hash_old(x->cert_info.subject));
 }
 #endif
 
@@ -186,12 +186,12 @@ int X509_cmp(const X509 *a, const X509 *b)
     if (rv)
         return rv;
     /* Check for match against stored encoding too */
-    if (!a->cert_info->enc.modified && !b->cert_info->enc.modified) {
-        rv = (int)(a->cert_info->enc.len - b->cert_info->enc.len);
+    if (!a->cert_info.enc.modified && !b->cert_info.enc.modified) {
+        rv = (int)(a->cert_info.enc.len - b->cert_info.enc.len);
         if (rv)
             return rv;
-        return memcmp(a->cert_info->enc.enc, b->cert_info->enc.enc,
-                      a->cert_info->enc.len);
+        return memcmp(a->cert_info.enc.enc, b->cert_info.enc.enc,
+                      a->cert_info.enc.len);
     }
     return rv;
 }
@@ -273,15 +273,13 @@ X509 *X509_find_by_issuer_and_serial(STACK_OF(X509) *sk, X509_NAME *name,
                                      ASN1_INTEGER *serial)
 {
     int i;
-    X509_CINF cinf;
     X509 x, *x509 = NULL;
 
     if (!sk)
         return NULL;
 
-    x.cert_info = &cinf;
-    cinf.serialNumber = serial;
-    cinf.issuer = name;
+    x.cert_info.serialNumber = *serial;
+    x.cert_info.issuer = name;
 
     for (i = 0; i < sk_X509_num(sk); i++) {
         x509 = sk_X509_value(sk, i);
@@ -306,16 +304,16 @@ X509 *X509_find_by_subject(STACK_OF(X509) *sk, X509_NAME *name)
 
 EVP_PKEY *X509_get_pubkey(X509 *x)
 {
-    if ((x == NULL) || (x->cert_info == NULL))
+    if (x == NULL)
         return (NULL);
-    return (X509_PUBKEY_get(x->cert_info->key));
+    return (X509_PUBKEY_get(x->cert_info.key));
 }
 
 ASN1_BIT_STRING *X509_get0_pubkey_bitstr(const X509 *x)
 {
     if (!x)
         return NULL;
-    return x->cert_info->key->public_key;
+    return x->cert_info.key->public_key;
 }
 
 int X509_check_private_key(X509 *x, EVP_PKEY *k)
@@ -458,7 +456,7 @@ int X509_CRL_check_suiteb(X509_CRL *crl, EVP_PKEY *pk, unsigned long flags)
     int sign_nid;
     if (!(flags & X509_V_FLAG_SUITEB_128_LOS))
         return X509_V_OK;
-    sign_nid = OBJ_obj2nid(crl->crl->sig_alg->algorithm);
+    sign_nid = OBJ_obj2nid(crl->crl.sig_alg.algorithm);
     return check_suite_b(pk, sign_nid, &flags);
 }
 
@@ -487,7 +485,7 @@ STACK_OF(X509) *X509_chain_up_ref(STACK_OF(X509) *chain)
     ret = sk_X509_dup(chain);
     for (i = 0; i < sk_X509_num(ret); i++) {
         X509 *x = sk_X509_value(ret, i);
-        CRYPTO_add(&x->references, 1, CRYPTO_LOCK_X509);
+        X509_up_ref(x);
     }
     return ret;
 }

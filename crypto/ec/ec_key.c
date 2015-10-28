@@ -61,29 +61,23 @@
  * contributed to the OpenSSL project.
  */
 
+#include <internal/cryptlib.h>
 #include <string.h>
 #include "ec_lcl.h"
 #include <openssl/err.h>
 
 EC_KEY *EC_KEY_new(void)
 {
-    EC_KEY *ret;
+    EC_KEY *ret = OPENSSL_zalloc(sizeof(*ret));
 
-    ret = (EC_KEY *)OPENSSL_malloc(sizeof(EC_KEY));
     if (ret == NULL) {
         ECerr(EC_F_EC_KEY_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
 
     ret->version = 1;
-    ret->flags = 0;
-    ret->group = NULL;
-    ret->pub_key = NULL;
-    ret->priv_key = NULL;
-    ret->enc_flag = 0;
     ret->conv_form = POINT_CONVERSION_UNCOMPRESSED;
     ret->references = 1;
-    ret->method_data = NULL;
     return (ret);
 }
 
@@ -122,14 +116,11 @@ void EC_KEY_free(EC_KEY *r)
 
     EC_GROUP_free(r->group);
     EC_POINT_free(r->pub_key);
-    if (r->priv_key != NULL)
-        BN_clear_free(r->priv_key);
+    BN_clear_free(r->priv_key);
 
     EC_EX_DATA_free_all_data(&r->method_data);
 
-    OPENSSL_cleanse((void *)r, sizeof(EC_KEY));
-
-    OPENSSL_free(r);
+    OPENSSL_clear_free((void *)r, sizeof(EC_KEY));
 }
 
 EC_KEY *EC_KEY_copy(EC_KEY *dest, const EC_KEY *src)
@@ -268,14 +259,12 @@ int EC_KEY_generate_key(EC_KEY *eckey)
     ok = 1;
 
  err:
-    if (order)
-        BN_free(order);
+    BN_free(order);
     if (eckey->pub_key == NULL)
         EC_POINT_free(pub_key);
-    if (priv_key != NULL && eckey->priv_key == NULL)
+    if (eckey->priv_key != priv_key)
         BN_free(priv_key);
-    if (ctx != NULL)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     return (ok);
 }
 
@@ -302,7 +291,7 @@ int EC_KEY_check_key(const EC_KEY *eckey)
         goto err;
 
     /* testing whether the pub_key is on the elliptic curve */
-    if (!EC_POINT_is_on_curve(eckey->group, eckey->pub_key, ctx)) {
+    if (EC_POINT_is_on_curve(eckey->group, eckey->pub_key, ctx) <= 0) {
         ECerr(EC_F_EC_KEY_CHECK_KEY, EC_R_POINT_IS_NOT_ON_CURVE);
         goto err;
     }
@@ -341,8 +330,7 @@ int EC_KEY_check_key(const EC_KEY *eckey)
     }
     ok = 1;
  err:
-    if (ctx != NULL)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     EC_POINT_free(point);
     return (ok);
 }
@@ -353,7 +341,10 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     BN_CTX *ctx = NULL;
     BIGNUM *tx, *ty;
     EC_POINT *point = NULL;
-    int ok = 0, tmp_nid, is_char_two = 0;
+    int ok = 0;
+#ifndef OPENSSL_NO_EC2M
+    int tmp_nid, is_char_two = 0;
+#endif
 
     if (!key || !key->group || !x || !y) {
         ECerr(EC_F_EC_KEY_SET_PUBLIC_KEY_AFFINE_COORDINATES,
@@ -369,14 +360,15 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     if (!point)
         goto err;
 
+    tx = BN_CTX_get(ctx);
+    ty = BN_CTX_get(ctx);
+
+#ifndef OPENSSL_NO_EC2M
     tmp_nid = EC_METHOD_get_field_type(EC_GROUP_method_of(key->group));
 
     if (tmp_nid == NID_X9_62_characteristic_two_field)
         is_char_two = 1;
 
-    tx = BN_CTX_get(ctx);
-    ty = BN_CTX_get(ctx);
-#ifndef OPENSSL_NO_EC2M
     if (is_char_two) {
         if (!EC_POINT_set_affine_coordinates_GF2m(key->group, point,
                                                   x, y, ctx))
@@ -415,8 +407,7 @@ int EC_KEY_set_public_key_affine_coordinates(EC_KEY *key, BIGNUM *x,
     ok = 1;
 
  err:
-    if (ctx)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     EC_POINT_free(point);
     return ok;
 
@@ -441,8 +432,7 @@ const BIGNUM *EC_KEY_get0_private_key(const EC_KEY *key)
 
 int EC_KEY_set_private_key(EC_KEY *key, const BIGNUM *priv_key)
 {
-    if (key->priv_key)
-        BN_clear_free(key->priv_key);
+    BN_clear_free(key->priv_key);
     key->priv_key = BN_dup(priv_key);
     return (key->priv_key == NULL) ? 0 : 1;
 }

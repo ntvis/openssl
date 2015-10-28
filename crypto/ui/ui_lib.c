@@ -58,7 +58,7 @@
  */
 
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/e_os2.h>
 #include <openssl/buffer.h>
 #include <openssl/ui.h>
@@ -74,9 +74,8 @@ UI *UI_new(void)
 
 UI *UI_new_method(const UI_METHOD *method)
 {
-    UI *ret;
+    UI *ret = OPENSSL_zalloc(sizeof(*ret));
 
-    ret = (UI *)OPENSSL_malloc(sizeof(UI));
     if (ret == NULL) {
         UIerr(UI_F_UI_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return NULL;
@@ -86,9 +85,6 @@ UI *UI_new_method(const UI_METHOD *method)
     else
         ret->meth = method;
 
-    ret->strings = NULL;
-    ret->user_data = NULL;
-    ret->flags = 0;
     CRYPTO_new_ex_data(CRYPTO_EX_INDEX_UI, ret, &ret->ex_data);
     return ret;
 }
@@ -142,7 +138,7 @@ static UI_STRING *general_allocate_prompt(UI *ui, const char *prompt,
     } else if ((type == UIT_PROMPT || type == UIT_VERIFY
                 || type == UIT_BOOLEAN) && result_buf == NULL) {
         UIerr(UI_F_GENERAL_ALLOCATE_PROMPT, UI_R_NO_RESULT_BUFFER);
-    } else if ((ret = (UI_STRING *)OPENSSL_malloc(sizeof(UI_STRING)))) {
+    } else if ((ret = OPENSSL_malloc(sizeof(*ret)))) {
         ret->out_string = prompt;
         ret->flags = prompt_freeable ? OUT_STRING_FREEABLE : 0;
         ret->input_flags = input_flags;
@@ -336,14 +332,10 @@ int UI_dup_input_boolean(UI *ui, const char *prompt, const char *action_desc,
                                     ok_chars_copy, cancel_chars_copy, 1,
                                     UIT_BOOLEAN, flags, result_buf);
  err:
-    if (prompt_copy)
-        OPENSSL_free(prompt_copy);
-    if (action_desc_copy)
-        OPENSSL_free(action_desc_copy);
-    if (ok_chars_copy)
-        OPENSSL_free(ok_chars_copy);
-    if (cancel_chars_copy)
-        OPENSSL_free(cancel_chars_copy);
+    OPENSSL_free(prompt_copy);
+    OPENSSL_free(action_desc_copy);
+    OPENSSL_free(ok_chars_copy);
+    OPENSSL_free(cancel_chars_copy);
     return -1;
 }
 
@@ -410,7 +402,7 @@ char *UI_construct_prompt(UI *ui, const char *object_desc,
             len += sizeof(prompt2) - 1 + strlen(object_name);
         len += sizeof(prompt3) - 1;
 
-        prompt = (char *)OPENSSL_malloc(len + 1);
+        prompt = OPENSSL_malloc(len + 1);
         if (prompt == NULL)
             return NULL;
         BUF_strlcpy(prompt, prompt1, len + 1);
@@ -587,12 +579,10 @@ const UI_METHOD *UI_set_method(UI *ui, const UI_METHOD *meth)
 
 UI_METHOD *UI_create_method(char *name)
 {
-    UI_METHOD *ui_method = (UI_METHOD *)OPENSSL_malloc(sizeof(UI_METHOD));
+    UI_METHOD *ui_method = OPENSSL_zalloc(sizeof(*ui_method));
 
-    if (ui_method) {
-        memset(ui_method, 0, sizeof(*ui_method));
+    if (ui_method)
         ui_method->name = BUF_strdup(name);
-    }
     return ui_method;
 }
 

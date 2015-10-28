@@ -59,7 +59,7 @@
 #include <errno.h>
 #include <time.h>
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "des_locl.h"
 #include <openssl/rand.h>
 
@@ -95,6 +95,9 @@ int DES_enc_write(int fd, const void *_buf, int len,
     unsigned char *p;
     const unsigned char *cp;
     static int start = 1;
+
+    if (len < 0)
+        return -1;
 
     if (outbuf == NULL) {
         outbuf = OPENSSL_malloc(BSIZE + HDRSIZE);

@@ -244,8 +244,7 @@ static void *mem_list_start(STORE *s, STORE_OBJECT_TYPES type,
                             OPENSSL_ITEM attributes[],
                             OPENSSL_ITEM parameters[])
 {
-    struct mem_ctx_st *context =
-        (struct mem_ctx_st *)OPENSSL_malloc(sizeof(struct mem_ctx_st));
+    struct mem_ctx_st *context = OPENSSL_zalloc(sizeof(*context));
     void *attribute_context = NULL;
     STORE_ATTR_INFO *attrs = NULL;
 
@@ -253,7 +252,6 @@ static void *mem_list_start(STORE *s, STORE_OBJECT_TYPES type,
         STOREerr(STORE_F_MEM_LIST_START, ERR_R_MALLOC_FAILURE);
         return 0;
     }
-    memset(context, 0, sizeof(struct mem_ctx_st));
 
     attribute_context = STORE_parse_attrs_start(attributes);
     if (!attribute_context) {
@@ -347,10 +345,9 @@ static int mem_list_end(STORE *s, void *handle)
         STOREerr(STORE_F_MEM_LIST_END, ERR_R_PASSED_NULL_PARAMETER);
         return 0;
     }
-    if (context && context->search_attributes)
-        sk_STORE_ATTR_INFO_free(context->search_attributes);
     if (context)
-        OPENSSL_free(context);
+        sk_STORE_ATTR_INFO_free(context->search_attributes);
+    OPENSSL_free(context);
     return 1;
 }
 

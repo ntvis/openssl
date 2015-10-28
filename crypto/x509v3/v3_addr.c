@@ -62,13 +62,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 #include <openssl/buffer.h>
 #include <openssl/x509v3.h>
+#include "internal/x509_int.h"
+#include "ext_dat.h"
 
+#ifndef OPENSSL_NO_RFC3779
 
 /*
  * OpenSSL ASN.1 template translation of RFC 3779 2.2.3.
@@ -97,7 +100,7 @@ ASN1_SEQUENCE(IPAddressFamily) = {
 ASN1_ITEM_TEMPLATE(IPAddrBlocks) =
   ASN1_EX_TEMPLATE_TYPE(ASN1_TFLG_SEQUENCE_OF, 0,
                         IPAddrBlocks, IPAddressFamily)
-ASN1_ITEM_TEMPLATE_END(IPAddrBlocks)
+static_ASN1_ITEM_TEMPLATE_END(IPAddrBlocks)
 
 IMPLEMENT_ASN1_FUNCTIONS(IPAddressRange)
 IMPLEMENT_ASN1_FUNCTIONS(IPAddressOrRange)
@@ -945,7 +948,7 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
         CONF_VALUE *val = sk_CONF_VALUE_value(values, i);
         unsigned char min[ADDR_RAW_BUF_LEN], max[ADDR_RAW_BUF_LEN];
         unsigned afi, *safi = NULL, safi_;
-        const char *addr_chars;
+        const char *addr_chars = NULL;
         int prefixlen, i1, i2, delim, length;
 
         if (!name_cmp(val->name, "IPv4")) {
@@ -1002,7 +1005,7 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
          * Check for inheritance.  Not worth additional complexity to
          * optimize this (seldom-used) case.
          */
-        if (!strcmp(s, "inherit")) {
+        if (strcmp(s, "inherit") == 0) {
             if (!v3_addr_add_inherit(addr, afi, safi)) {
                 X509V3err(X509V3_F_V2I_IPADDRBLOCKS,
                           X509V3_R_INVALID_INHERITANCE);
@@ -1339,3 +1342,5 @@ int v3_addr_validate_resource_set(STACK_OF(X509) *chain,
         return 0;
     return v3_addr_validate_path_internal(NULL, chain, ext);
 }
+
+#endif                          /* OPENSSL_NO_RFC3779 */

@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/rand.h>
@@ -66,17 +66,14 @@
 #endif
 #include "evp_locl.h"
 
-const char EVP_version[] = "EVP" OPENSSL_VERSION_PTEXT;
-
 void EVP_CIPHER_CTX_init(EVP_CIPHER_CTX *ctx)
 {
-    memset(ctx, 0, sizeof(EVP_CIPHER_CTX));
-    /* ctx->cipher=NULL; */
+    memset(ctx, 0, sizeof(*ctx));
 }
 
 EVP_CIPHER_CTX *EVP_CIPHER_CTX_new(void)
 {
-    EVP_CIPHER_CTX *ctx = OPENSSL_malloc(sizeof *ctx);
+    EVP_CIPHER_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
     if (ctx)
         EVP_CIPHER_CTX_init(ctx);
     return ctx;
@@ -161,7 +158,7 @@ int EVP_CipherInit_ex(EVP_CIPHER_CTX *ctx, const EVP_CIPHER *cipher,
 
         ctx->cipher = cipher;
         if (ctx->cipher->ctx_size) {
-            ctx->cipher_data = OPENSSL_malloc(ctx->cipher->ctx_size);
+            ctx->cipher_data = OPENSSL_zalloc(ctx->cipher->ctx_size);
             if (!ctx->cipher_data) {
                 EVPerr(EVP_F_EVP_CIPHERINIT_EX, ERR_R_MALLOC_FAILURE);
                 return 0;
@@ -523,8 +520,7 @@ int EVP_DecryptFinal_ex(EVP_CIPHER_CTX *ctx, unsigned char *out, int *outl)
 void EVP_CIPHER_CTX_free(EVP_CIPHER_CTX *ctx)
 {
     EVP_CIPHER_CTX_cleanup(ctx);
-    if (ctx)
-        OPENSSL_free(ctx);
+    OPENSSL_free(ctx);
 }
 
 int EVP_CIPHER_CTX_cleanup(EVP_CIPHER_CTX *c)
@@ -538,8 +534,7 @@ int EVP_CIPHER_CTX_cleanup(EVP_CIPHER_CTX *c)
         if (c->cipher_data)
             OPENSSL_cleanse(c->cipher_data, c->cipher->ctx_size);
     }
-    if (c->cipher_data)
-        OPENSSL_free(c->cipher_data);
+    OPENSSL_free(c->cipher_data);
 #ifndef OPENSSL_NO_ENGINE
     if (c->engine)
         /*
@@ -548,7 +543,7 @@ int EVP_CIPHER_CTX_cleanup(EVP_CIPHER_CTX *c)
          */
         ENGINE_finish(c->engine);
 #endif
-    memset(c, 0, sizeof(EVP_CIPHER_CTX));
+    memset(c, 0, sizeof(*c));
     return 1;
 }
 
@@ -621,7 +616,7 @@ int EVP_CIPHER_CTX_copy(EVP_CIPHER_CTX *out, const EVP_CIPHER_CTX *in)
 #endif
 
     EVP_CIPHER_CTX_cleanup(out);
-    memcpy(out, in, sizeof *out);
+    memcpy(out, in, sizeof(*out));
 
     if (in->cipher_data && in->cipher->ctx_size) {
         out->cipher_data = OPENSSL_malloc(in->cipher->ctx_size);

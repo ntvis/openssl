@@ -1,5 +1,5 @@
 /* ====================================================================
- * Copyright (c) 1998-2001 The OpenSSL Project.  All rights reserved.
+ * Copyright (c) 1998-2015 The OpenSSL Project.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -128,8 +128,8 @@ typedef struct buf_mem_st BUF_MEM;
 
 typedef struct evp_cipher_st EVP_CIPHER;
 typedef struct evp_cipher_ctx_st EVP_CIPHER_CTX;
-typedef struct env_md_st EVP_MD;
-typedef struct env_md_ctx_st EVP_MD_CTX;
+typedef struct evp_md_st EVP_MD;
+typedef struct evp_md_ctx_st EVP_MD_CTX;
 typedef struct evp_pkey_st EVP_PKEY;
 
 typedef struct evp_pkey_asn1_method_st EVP_PKEY_ASN1_METHOD;
@@ -172,11 +172,12 @@ typedef struct store_method_st STORE_METHOD;
 typedef struct ui_st UI;
 typedef struct ui_method_st UI_METHOD;
 
-typedef struct st_ERR_FNS ERR_FNS;
-
 typedef struct engine_st ENGINE;
 typedef struct ssl_st SSL;
 typedef struct ssl_ctx_st SSL_CTX;
+
+typedef struct comp_ctx_st COMP_CTX;
+typedef struct comp_method_st COMP_METHOD;
 
 typedef struct X509_POLICY_NODE_st X509_POLICY_NODE;
 typedef struct X509_POLICY_LEVEL_st X509_POLICY_LEVEL;

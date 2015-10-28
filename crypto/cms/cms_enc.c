@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -62,8 +62,6 @@
 #include "cms_lcl.h"
 
 /* CMS EncryptedData Utilities */
-
-DECLARE_ASN1_ITEM(CMS_EncryptedData)
 
 /* Return BIO based on EncryptedContentInfo and key */
 
@@ -164,8 +162,7 @@ BIO *cms_EncryptedContent_init_bio(CMS_EncryptedContentInfo *ec)
                 goto err;
             } else {
                 /* Use random key */
-                OPENSSL_cleanse(ec->key, ec->keylen);
-                OPENSSL_free(ec->key);
+                OPENSSL_clear_free(ec->key, ec->keylen);
                 ec->key = tkey;
                 ec->keylen = tkeylen;
                 tkey = NULL;
@@ -195,15 +192,11 @@ BIO *cms_EncryptedContent_init_bio(CMS_EncryptedContentInfo *ec)
     ok = 1;
 
  err:
-    if (ec->key && !keep_key) {
-        OPENSSL_cleanse(ec->key, ec->keylen);
-        OPENSSL_free(ec->key);
+    if (!keep_key || !ok) {
+        OPENSSL_clear_free(ec->key, ec->keylen);
         ec->key = NULL;
     }
-    if (tkey) {
-        OPENSSL_cleanse(tkey, tkeylen);
-        OPENSSL_free(tkey);
-    }
+    OPENSSL_clear_free(tkey, tkeylen);
     if (ok)
         return b;
     BIO_free(b);

@@ -52,7 +52,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/lhash.h>
 #include "eng_int.h"
@@ -147,7 +147,7 @@ int engine_table_register(ENGINE_TABLE **table, ENGINE_CLEANUP_CB *cleanup,
         tmplate.nid = *nids;
         fnd = lh_ENGINE_PILE_retrieve(&(*table)->piles, &tmplate);
         if (!fnd) {
-            fnd = OPENSSL_malloc(sizeof(ENGINE_PILE));
+            fnd = OPENSSL_malloc(sizeof(*fnd));
             if (!fnd)
                 goto end;
             fnd->uptodate = 1;
@@ -216,6 +216,8 @@ void engine_table_unregister(ENGINE_TABLE **table, ENGINE *e)
 
 static void int_cleanup_cb_doall(ENGINE_PILE *p)
 {
+    if (!p)
+        return;
     sk_ENGINE_free(p->sk);
     if (p->funct)
         engine_unlocked_finish(p->funct, 0);

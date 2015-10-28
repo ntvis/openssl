@@ -57,21 +57,13 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #ifndef OPENSSL_NO_ENGINE
 # include <openssl/engine.h>
 #endif
 #include "internal/asn1_int.h"
-
-extern const EVP_PKEY_ASN1_METHOD rsa_asn1_meths[];
-extern const EVP_PKEY_ASN1_METHOD dsa_asn1_meths[];
-extern const EVP_PKEY_ASN1_METHOD dh_asn1_meth;
-extern const EVP_PKEY_ASN1_METHOD dhx_asn1_meth;
-extern const EVP_PKEY_ASN1_METHOD eckey_asn1_meth;
-extern const EVP_PKEY_ASN1_METHOD hmac_asn1_meth;
-extern const EVP_PKEY_ASN1_METHOD cmac_asn1_meth;
 
 /* Keep this sorted in type order !! */
 static const EVP_PKEY_ASN1_METHOD *standard_methods[] = {
@@ -107,8 +99,7 @@ static STACK_OF(EVP_PKEY_ASN1_METHOD) *app_methods = NULL;
 void main()
 {
     int i;
-    for (i = 0;
-         i < sizeof(standard_methods) / sizeof(EVP_PKEY_ASN1_METHOD *); i++)
+    for (i = 0; i < OSSL_NELEM(standard_methods); i++)
         fprintf(stderr, "Number %d id=%d (%s)\n", i,
                 standard_methods[i]->pkey_id,
                 OBJ_nid2sn(standard_methods[i]->pkey_id));
@@ -129,7 +120,7 @@ IMPLEMENT_OBJ_BSEARCH_CMP_FN(const EVP_PKEY_ASN1_METHOD *,
 
 int EVP_PKEY_asn1_get_count(void)
 {
-    int num = sizeof(standard_methods) / sizeof(EVP_PKEY_ASN1_METHOD *);
+    int num = OSSL_NELEM(standard_methods);
     if (app_methods)
         num += sk_EVP_PKEY_ASN1_METHOD_num(app_methods);
     return num;
@@ -137,7 +128,7 @@ int EVP_PKEY_asn1_get_count(void)
 
 const EVP_PKEY_ASN1_METHOD *EVP_PKEY_asn1_get0(int idx)
 {
-    int num = sizeof(standard_methods) / sizeof(EVP_PKEY_ASN1_METHOD *);
+    int num = OSSL_NELEM(standard_methods);
     if (idx < 0)
         return NULL;
     if (idx < num)
@@ -157,8 +148,7 @@ static const EVP_PKEY_ASN1_METHOD *pkey_asn1_find(int type)
         if (idx >= 0)
             return sk_EVP_PKEY_ASN1_METHOD_value(app_methods, idx);
     }
-    ret = OBJ_bsearch_ameth(&t, standard_methods, sizeof(standard_methods)
-                            / sizeof(EVP_PKEY_ASN1_METHOD *));
+    ret = OBJ_bsearch_ameth(&t, standard_methods, OSSL_NELEM(standard_methods));
     if (!ret || !*ret)
         return NULL;
     return *ret;
@@ -223,8 +213,8 @@ const EVP_PKEY_ASN1_METHOD *EVP_PKEY_asn1_find_str(ENGINE **pe,
         ameth = EVP_PKEY_asn1_get0(i);
         if (ameth->pkey_flags & ASN1_PKEY_ALIAS)
             continue;
-        if (((int)strlen(ameth->pem_str) == len) &&
-            !strncasecmp(ameth->pem_str, str, len))
+        if (((int)strlen(ameth->pem_str) == len)
+            && (strncasecmp(ameth->pem_str, str, len) == 0))
             return ameth;
     }
     return NULL;
@@ -285,12 +275,10 @@ const EVP_PKEY_ASN1_METHOD *EVP_PKEY_get0_asn1(EVP_PKEY *pkey)
 EVP_PKEY_ASN1_METHOD *EVP_PKEY_asn1_new(int id, int flags,
                                         const char *pem_str, const char *info)
 {
-    EVP_PKEY_ASN1_METHOD *ameth;
-    ameth = OPENSSL_malloc(sizeof(EVP_PKEY_ASN1_METHOD));
+    EVP_PKEY_ASN1_METHOD *ameth = OPENSSL_zalloc(sizeof(*ameth));
+
     if (!ameth)
         return NULL;
-
-    memset(ameth, 0, sizeof(EVP_PKEY_ASN1_METHOD));
 
     ameth->pkey_id = id;
     ameth->pkey_base_id = id;
@@ -300,48 +288,17 @@ EVP_PKEY_ASN1_METHOD *EVP_PKEY_asn1_new(int id, int flags,
         ameth->info = BUF_strdup(info);
         if (!ameth->info)
             goto err;
-    } else
-        ameth->info = NULL;
+    }
 
     if (pem_str) {
         ameth->pem_str = BUF_strdup(pem_str);
         if (!ameth->pem_str)
             goto err;
-    } else
-        ameth->pem_str = NULL;
-
-    ameth->pub_decode = 0;
-    ameth->pub_encode = 0;
-    ameth->pub_cmp = 0;
-    ameth->pub_print = 0;
-
-    ameth->priv_decode = 0;
-    ameth->priv_encode = 0;
-    ameth->priv_print = 0;
-
-    ameth->old_priv_encode = 0;
-    ameth->old_priv_decode = 0;
-
-    ameth->item_verify = 0;
-    ameth->item_sign = 0;
-
-    ameth->pkey_size = 0;
-    ameth->pkey_bits = 0;
-
-    ameth->param_decode = 0;
-    ameth->param_encode = 0;
-    ameth->param_missing = 0;
-    ameth->param_copy = 0;
-    ameth->param_cmp = 0;
-    ameth->param_print = 0;
-
-    ameth->pkey_free = 0;
-    ameth->pkey_ctrl = 0;
+    }
 
     return ameth;
 
  err:
-
     EVP_PKEY_asn1_free(ameth);
     return NULL;
 
@@ -384,10 +341,8 @@ void EVP_PKEY_asn1_copy(EVP_PKEY_ASN1_METHOD *dst,
 void EVP_PKEY_asn1_free(EVP_PKEY_ASN1_METHOD *ameth)
 {
     if (ameth && (ameth->pkey_flags & ASN1_PKEY_DYNAMIC)) {
-        if (ameth->pem_str)
-            OPENSSL_free(ameth->pem_str);
-        if (ameth->info)
-            OPENSSL_free(ameth->info);
+        OPENSSL_free(ameth->pem_str);
+        OPENSSL_free(ameth->info);
         OPENSSL_free(ameth);
     }
 }
@@ -470,4 +425,22 @@ void EVP_PKEY_asn1_set_security_bits(EVP_PKEY_ASN1_METHOD *ameth,
                                                                 *pk))
 {
     ameth->pkey_security_bits = pkey_security_bits;
+}
+
+void EVP_PKEY_asn1_set_item(EVP_PKEY_ASN1_METHOD *ameth,
+                            int (*item_verify) (EVP_MD_CTX *ctx,
+                                                const ASN1_ITEM *it,
+                                                void *asn,
+                                                X509_ALGOR *a,
+                                                ASN1_BIT_STRING *sig,
+                                                EVP_PKEY *pkey),
+                            int (*item_sign) (EVP_MD_CTX *ctx,
+                                              const ASN1_ITEM *it,
+                                              void *asn,
+                                              X509_ALGOR *alg1,
+                                              X509_ALGOR *alg2,
+                                              ASN1_BIT_STRING *sig))
+{
+    ameth->item_sign = item_sign;
+    ameth->item_verify = item_verify;
 }

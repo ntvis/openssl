@@ -114,7 +114,7 @@ EVP_CIPHER_CTX_init() initializes cipher contex B<ctx>.
 EVP_EncryptInit_ex() sets up cipher context B<ctx> for encryption
 with cipher B<type> from ENGINE B<impl>. B<ctx> must be initialized
 before calling this function. B<type> is normally supplied
-by a function such as EVP_des_cbc(). If B<impl> is NULL then the
+by a function such as EVP_aes_256_cbc(). If B<impl> is NULL then the
 default implementation is used. B<key> is the symmetric key to use
 and B<iv> is the IV to use (if necessary), the actual number of bytes
 used for the key and IV depends on the cipher. It is possible to set
@@ -282,8 +282,8 @@ OBJECT IDENTIFIER or NID_undef if it has no defined OBJECT IDENTIFIER.
 
 EVP_CIPHER_CTX_cipher() returns an B<EVP_CIPHER> structure.
 
-EVP_CIPHER_param_to_asn1() and EVP_CIPHER_asn1_to_param() return 1 for
-success or zero for failure.
+EVP_CIPHER_param_to_asn1() and EVP_CIPHER_asn1_to_param() return greater
+than zero for success and zero or a negative number.
 
 =head1 CIPHER LISTING
 
@@ -610,7 +610,7 @@ with a 128-bit key:
 
 =head1 SEE ALSO
 
-L<evp(3)|evp(3)>
+L<evp(3)>
 
 =head1 HISTORY
 

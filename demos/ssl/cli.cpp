@@ -38,7 +38,7 @@ void main ()
   SSL_METHOD *meth;
 
   SSLeay_add_ssl_algorithms();
-  meth = SSLv23_client_method();
+  meth = TLS_client_method();
   SSL_load_error_strings();
   ctx = SSL_CTX_new (meth);                        CHK_NULL(ctx);
 
@@ -47,7 +47,7 @@ void main ()
   
   sd = socket (AF_INET, SOCK_STREAM, 0);       CHK_ERR(sd, "socket");
  
-  memset (&sa, '\0', sizeof(sa));
+  memset(&sa, 0, sizeof(sa));
   sa.sin_family      = AF_INET;
   sa.sin_addr.s_addr = inet_addr ("127.0.0.1");   /* Server IP */
   sa.sin_port        = htons     (1111);          /* Server Port number */

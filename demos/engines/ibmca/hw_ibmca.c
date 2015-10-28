@@ -388,11 +388,11 @@ static int ibmca_init(ENGINE *e)
         goto err;
     }
 
-    if (!(p1 = DSO_bind_func(ibmca_dso, IBMCA_F1)) ||
-        !(p2 = DSO_bind_func(ibmca_dso, IBMCA_F2)) ||
-        !(p3 = DSO_bind_func(ibmca_dso, IBMCA_F3)) ||
-        !(p4 = DSO_bind_func(ibmca_dso, IBMCA_F4)) ||
-        !(p5 = DSO_bind_func(ibmca_dso, IBMCA_F5))) {
+    if ((p1 = DSO_bind_func(ibmca_dso, IBMCA_F1)) == NULL
+        || (p2 = DSO_bind_func(ibmca_dso, IBMCA_F2)) == NULL
+        || (p3 = DSO_bind_func(ibmca_dso, IBMCA_F3)) == NULL
+        || (p4 = DSO_bind_func(ibmca_dso, IBMCA_F4)) == NULL
+        || (p5 = DSO_bind_func(ibmca_dso, IBMCA_F5)) == NULL) {
         IBMCAerr(IBMCA_F_IBMCA_INIT, IBMCA_R_DSO_FAILURE);
         goto err;
     }
@@ -412,9 +412,7 @@ static int ibmca_init(ENGINE *e)
 
     return 1;
  err:
-    if (ibmca_dso)
-        DSO_free(ibmca_dso);
-
+    DSO_free(ibmca_dso);
     p_icaOpenAdapter = NULL;
     p_icaCloseAdapter = NULL;
     p_icaRsaModExpo = NULL;
@@ -508,7 +506,7 @@ static int ibmca_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
     if (publKey == NULL) {
         goto err;
     }
-    memset(publKey, 0, sizeof(ICA_KEY_RSA_MODEXPO));
+    memset(publKey, 0, sizeof(*publKey));
 
     publKey->keyType = CORRECT_ENDIANNESS(ME_KEY_TYPE);
     publKey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_MODEXPO));
@@ -598,8 +596,7 @@ static int ibmca_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa)
                                       rsa->dmq1, rsa->iqmp, ctx);
     }
  err:
-    if (ctx)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     return to_return;
 }
 #  endif
@@ -673,7 +670,7 @@ static int ibmca_mod_exp_crt(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
 
 /* end SAB additions */
 
-    memset(privKey, 0, sizeof(ICA_KEY_RSA_CRT));
+    memset(privKey, 0, sizeof(*privKey));
     privKey->keyType = CORRECT_ENDIANNESS(CRT_KEY_TYPE);
     privKey->keyLength = CORRECT_ENDIANNESS(sizeof(ICA_KEY_RSA_CRT));
     privKey->modulusBitLength = CORRECT_ENDIANNESS(BN_num_bytes(q) * 2 * 8);

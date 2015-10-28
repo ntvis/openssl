@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #ifndef OPENSSL_NO_DES
 # include <openssl/evp.h>
 # include <openssl/objects.h>
@@ -241,12 +241,7 @@ static int des_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
         }
     }
 # endif
-# ifdef EVP_CHECK_DES_KEY
-    if (DES_set_key_checked(deskey, dat->ks.ks) != 0)
-        return 0;
-# else
     DES_set_key_unchecked(deskey, ctx->cipher_data);
-# endif
     return 1;
 }
 

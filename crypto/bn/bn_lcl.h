@@ -167,10 +167,10 @@ int RAND_pseudo_bytes(unsigned char *buf, int num);
                          * *genuinely* constant variables that aren't mutable \
                          * wouldn't be constructed with top!=dmax. */ \
                         BN_ULONG *_not_const; \
-                        memcpy(&_not_const, &_bnum1->d, sizeof(BN_ULONG*)); \
+                        memcpy(&_not_const, &_bnum1->d, sizeof(_not_const)); \
                         RAND_bytes(&_tmp_char, 1); /* Debug only - safe to ignore error return */\
-                        memset((unsigned char *)(_not_const + _bnum1->top), _tmp_char, \
-                                (_bnum1->dmax - _bnum1->top) * sizeof(BN_ULONG)); \
+                        memset(_not_const + _bnum1->top, _tmp_char, \
+                                sizeof(*_not_const) * (_bnum1->dmax - _bnum1->top)); \
                 } \
         } while(0)
 #   ifdef BN_DEBUG_TRIX
@@ -443,7 +443,7 @@ unsigned __int64 _umul128(unsigned __int64 a, unsigned __int64 b,
 #   endif
 #  elif defined(__mips) && (defined(SIXTY_FOUR_BIT) || defined(SIXTY_FOUR_BIT_LONG))
 #   if defined(__GNUC__) && __GNUC__>=2
-#    if __GNUC__>=4 && __GNUC_MINOR__>=4
+#    if __GNUC__>4 || (__GNUC__>=4 && __GNUC_MINOR__>=4)
                                      /* "h" constraint is no more since 4.4 */
 #     define BN_UMULT_HIGH(a,b)          (((__uint128_t)(a)*(b))>>64)
 #     define BN_UMULT_LOHI(low,high,a,b) ({     \

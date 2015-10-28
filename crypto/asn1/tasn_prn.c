@@ -58,7 +58,7 @@
  */
 
 #include <stddef.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
 #include <openssl/objects.h>
@@ -74,7 +74,7 @@
 
 /* ASN1_PCTX routines */
 
-ASN1_PCTX default_pctx = {
+static ASN1_PCTX default_pctx = {
     ASN1_PCTX_FLAGS_SHOW_ABSENT, /* flags */
     0,                          /* nm_flags */
     0,                          /* cert_flags */
@@ -85,16 +85,12 @@ ASN1_PCTX default_pctx = {
 ASN1_PCTX *ASN1_PCTX_new(void)
 {
     ASN1_PCTX *ret;
-    ret = OPENSSL_malloc(sizeof(ASN1_PCTX));
+
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ASN1err(ASN1_F_ASN1_PCTX_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
     }
-    ret->flags = 0;
-    ret->nm_flags = 0;
-    ret->cert_flags = 0;
-    ret->oid_flags = 0;
-    ret->str_flags = 0;
     return ret;
 }
 

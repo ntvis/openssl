@@ -57,29 +57,21 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/asn1.h>
 #include <openssl/x509.h>
 
 X509_INFO *X509_INFO_new(void)
 {
-    X509_INFO *ret = NULL;
+    X509_INFO *ret;
 
-    ret = (X509_INFO *)OPENSSL_malloc(sizeof(X509_INFO));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ASN1err(ASN1_F_X509_INFO_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-
-    ret->enc_cipher.cipher = NULL;
-    ret->enc_len = 0;
-    ret->enc_data = NULL;
-
     ret->references = 1;
-    ret->x509 = NULL;
-    ret->crl = NULL;
-    ret->x_pkey = NULL;
     return (ret);
 }
 
@@ -103,13 +95,9 @@ void X509_INFO_free(X509_INFO *x)
     }
 #endif
 
-    if (x->x509 != NULL)
-        X509_free(x->x509);
-    if (x->crl != NULL)
-        X509_CRL_free(x->crl);
-    if (x->x_pkey != NULL)
-        X509_PKEY_free(x->x_pkey);
-    if (x->enc_data != NULL)
-        OPENSSL_free(x->enc_data);
+    X509_free(x->x509);
+    X509_CRL_free(x->crl);
+    X509_PKEY_free(x->x_pkey);
+    OPENSSL_free(x->enc_data);
     OPENSSL_free(x);
 }

@@ -51,13 +51,18 @@
  * ====================================================================
  */
 
+#include <e_os.h>
+
+#ifndef OPENSSL_NO_CMS
 #include <string.h>
 #include <openssl/dh.h>
 #include <openssl/evp.h>
 #include <openssl/asn1.h>
 #include <openssl/cms.h>
 
+
 /* Key derivation from X9.42/RFC2631 */
+/* Uses CMS functions, hence the #ifdef wrapper. */
 
 #define DH_KDF_MAX      (1L << 30)
 
@@ -180,8 +185,8 @@ int DH_KDF_X9_42(unsigned char *out, size_t outlen,
     }
     rv = 1;
  err:
-    if (der)
-        OPENSSL_free(der);
+    OPENSSL_free(der);
     EVP_MD_CTX_cleanup(&mctx);
     return rv;
 }
+#endif

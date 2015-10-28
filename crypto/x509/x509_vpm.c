@@ -59,7 +59,7 @@
 
 #include <stdio.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/crypto.h>
 #include <openssl/lhash.h>
 #include <openssl/buffer.h>
@@ -83,8 +83,6 @@ static void str_free(char *s)
     OPENSSL_free(s);
 }
 
-#define string_stack_free(sk) sk_OPENSSL_STRING_pop_free(sk, str_free)
-
 static int int_x509_param_set_hosts(X509_VERIFY_PARAM_ID *id, int mode,
                                     const char *name, size_t namelen)
 {
@@ -101,8 +99,8 @@ static int int_x509_param_set_hosts(X509_VERIFY_PARAM_ID *id, int mode,
     if (name && name[namelen - 1] == '\0')
         --namelen;
 
-    if (mode == SET_HOST && id->hosts) {
-        string_stack_free(id->hosts);
+    if (mode == SET_HOST) {
+        sk_OPENSSL_STRING_pop_free(id->hosts, str_free);
         id->hosts = NULL;
     }
     if (name == NULL || namelen == 0)
@@ -144,52 +142,41 @@ static void x509_verify_param_zero(X509_VERIFY_PARAM *param)
     param->inh_flags = 0;
     param->flags = 0;
     param->depth = -1;
-    if (param->policies) {
-        sk_ASN1_OBJECT_pop_free(param->policies, ASN1_OBJECT_free);
-        param->policies = NULL;
-    }
+    sk_ASN1_OBJECT_pop_free(param->policies, ASN1_OBJECT_free);
+    param->policies = NULL;
     paramid = param->id;
-    if (paramid->hosts) {
-        string_stack_free(paramid->hosts);
-        paramid->hosts = NULL;
-    }
-    if (paramid->peername)
-        OPENSSL_free(paramid->peername);
-    if (paramid->email) {
-        OPENSSL_free(paramid->email);
-        paramid->email = NULL;
-        paramid->emaillen = 0;
-    }
-    if (paramid->ip) {
-        OPENSSL_free(paramid->ip);
-        paramid->ip = NULL;
-        paramid->iplen = 0;
-    }
-
+    sk_OPENSSL_STRING_pop_free(paramid->hosts, str_free);
+    paramid->hosts = NULL;
+    OPENSSL_free(paramid->peername);
+    paramid->peername = NULL;
+    OPENSSL_free(paramid->email);
+    paramid->email = NULL;
+    paramid->emaillen = 0;
+    OPENSSL_free(paramid->ip);
+    paramid->ip = NULL;
+    paramid->iplen = 0;
 }
 
 X509_VERIFY_PARAM *X509_VERIFY_PARAM_new(void)
 {
     X509_VERIFY_PARAM *param;
     X509_VERIFY_PARAM_ID *paramid;
-    param = OPENSSL_malloc(sizeof(X509_VERIFY_PARAM));
+
+    param = OPENSSL_zalloc(sizeof(*param));
     if (!param)
         return NULL;
-    paramid = OPENSSL_malloc(sizeof(X509_VERIFY_PARAM));
+    param->id = paramid = OPENSSL_zalloc(sizeof(*paramid));
     if (!paramid) {
         OPENSSL_free(param);
         return NULL;
     }
-    memset(param, 0, sizeof(X509_VERIFY_PARAM));
-    memset(paramid, 0, sizeof(X509_VERIFY_PARAM_ID));
-    param->id = paramid;
     x509_verify_param_zero(param);
     return param;
 }
 
 void X509_VERIFY_PARAM_free(X509_VERIFY_PARAM *param)
 {
-    if (param == NULL)
+    if (!param)
         return;
     x509_verify_param_zero(param);
     OPENSSL_free(param->id);
@@ -296,10 +283,8 @@ int X509_VERIFY_PARAM_inherit(X509_VERIFY_PARAM *dest,
 
     /* Copy the host flags if and only if we're copying the host list */
     if (test_x509_verify_param_copy_id(hosts, NULL)) {
-        if (dest->id->hosts) {
-            string_stack_free(dest->id->hosts);
-            dest->id->hosts = NULL;
-        }
+        sk_OPENSSL_STRING_pop_free(dest->id->hosts, str_free);
+        dest->id->hosts = NULL;
         if (id->hosts) {
             dest->id->hosts =
                 sk_OPENSSL_STRING_deep_copy(id->hosts, str_copy, str_free);
@@ -349,8 +334,7 @@ static int int_x509_param_set1(char **pdest, size_t *pdestlen,
         tmp = NULL;
         srclen = 0;
     }
-    if (*pdest)
-        OPENSSL_free(*pdest);
+    OPENSSL_free(*pdest);
     *pdest = tmp;
     if (pdestlen)
         *pdestlen = srclen;
@@ -359,8 +343,7 @@ static int int_x509_param_set1(char **pdest, size_t *pdestlen,
 
 int X509_VERIFY_PARAM_set1_name(X509_VERIFY_PARAM *param, const char *name)
 {
-    if (param->name)
-        OPENSSL_free(param->name);
+    OPENSSL_free(param->name);
     param->name = BUF_strdup(name);
     if (param->name)
         return 1;
@@ -426,10 +409,10 @@ int X509_VERIFY_PARAM_set1_policies(X509_VERIFY_PARAM *param,
 {
     int i;
     ASN1_OBJECT *oid, *doid;
+
     if (!param)
         return 0;
-    if (param->policies)
-        sk_ASN1_OBJECT_pop_free(param->policies, ASN1_OBJECT_free);
+    sk_ASN1_OBJECT_pop_free(param->policies, ASN1_OBJECT_free);
 
     if (!policies) {
         param->policies = NULL;
@@ -616,7 +599,7 @@ int X509_VERIFY_PARAM_add0_table(X509_VERIFY_PARAM *param)
 
 int X509_VERIFY_PARAM_get_count(void)
 {
-    int num = sizeof(default_table) / sizeof(X509_VERIFY_PARAM);
+    int num = OSSL_NELEM(default_table);
     if (param_table)
         num += sk_X509_VERIFY_PARAM_num(param_table);
     return num;
@@ -624,7 +607,7 @@ int X509_VERIFY_PARAM_get_count(void)
 
 const X509_VERIFY_PARAM *X509_VERIFY_PARAM_get0(int id)
 {
-    int num = sizeof(default_table) / sizeof(X509_VERIFY_PARAM);
+    int num = OSSL_NELEM(default_table);
     if (id < num)
         return default_table + id;
     return sk_X509_VERIFY_PARAM_value(param_table, id - num);
@@ -641,14 +624,11 @@ const X509_VERIFY_PARAM *X509_VERIFY_PARAM_lookup(const char *name)
         if (idx != -1)
             return sk_X509_VERIFY_PARAM_value(param_table, idx);
     }
-    return OBJ_bsearch_table(&pm, default_table,
-                             sizeof(default_table) /
-                             sizeof(X509_VERIFY_PARAM));
+    return OBJ_bsearch_table(&pm, default_table, OSSL_NELEM(default_table));
 }
 
 void X509_VERIFY_PARAM_table_cleanup(void)
 {
-    if (param_table)
-        sk_X509_VERIFY_PARAM_pop_free(param_table, X509_VERIFY_PARAM_free);
+    sk_X509_VERIFY_PARAM_pop_free(param_table, X509_VERIFY_PARAM_free);
     param_table = NULL;
 }

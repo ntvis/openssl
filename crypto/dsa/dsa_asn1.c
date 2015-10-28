@@ -58,7 +58,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/dsa.h>
 #include <openssl/asn1.h>
 #include <openssl/asn1t.h>
@@ -70,7 +70,7 @@ static int sig_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
 {
     if (operation == ASN1_OP_NEW_PRE) {
         DSA_SIG *sig;
-        sig = OPENSSL_malloc(sizeof(DSA_SIG));
+        sig = OPENSSL_malloc(sizeof(*sig));
         if (!sig) {
             DSAerr(DSA_F_SIG_CB, ERR_R_MALLOC_FAILURE);
             return 0;
@@ -86,7 +86,7 @@ static int sig_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
 ASN1_SEQUENCE_cb(DSA_SIG, sig_cb) = {
         ASN1_SIMPLE(DSA_SIG, r, CBIGNUM),
         ASN1_SIMPLE(DSA_SIG, s, CBIGNUM)
-} ASN1_SEQUENCE_END_cb(DSA_SIG, DSA_SIG)
+} static_ASN1_SEQUENCE_END_cb(DSA_SIG, DSA_SIG)
 
 IMPLEMENT_ASN1_FUNCTIONS_const(DSA_SIG)
 
@@ -113,8 +113,8 @@ ASN1_SEQUENCE_cb(DSAPrivateKey, dsa_cb) = {
         ASN1_SIMPLE(DSA, q, BIGNUM),
         ASN1_SIMPLE(DSA, g, BIGNUM),
         ASN1_SIMPLE(DSA, pub_key, BIGNUM),
-        ASN1_SIMPLE(DSA, priv_key, BIGNUM)
-} ASN1_SEQUENCE_END_cb(DSA, DSAPrivateKey)
+        ASN1_SIMPLE(DSA, priv_key, CBIGNUM)
+} static_ASN1_SEQUENCE_END_cb(DSA, DSAPrivateKey)
 
 IMPLEMENT_ASN1_ENCODE_FUNCTIONS_const_fname(DSA, DSAPrivateKey, DSAPrivateKey)
 
@@ -122,7 +122,7 @@ ASN1_SEQUENCE_cb(DSAparams, dsa_cb) = {
         ASN1_SIMPLE(DSA, p, BIGNUM),
         ASN1_SIMPLE(DSA, q, BIGNUM),
         ASN1_SIMPLE(DSA, g, BIGNUM),
-} ASN1_SEQUENCE_END_cb(DSA, DSAparams)
+} static_ASN1_SEQUENCE_END_cb(DSA, DSAparams)
 
 IMPLEMENT_ASN1_ENCODE_FUNCTIONS_const_fname(DSA, DSAparams, DSAparams)
 
@@ -137,7 +137,7 @@ ASN1_SEQUENCE(DSAPublicKey) = {
         ASN1_SIMPLE(DSA, p, BIGNUM),
         ASN1_SIMPLE(DSA, q, BIGNUM),
         ASN1_SIMPLE(DSA, g, BIGNUM)
-} ASN1_SEQUENCE_END_name(DSA, DSAPublicKey)
+} static_ASN1_SEQUENCE_END_name(DSA, DSAPublicKey)
 
 IMPLEMENT_ASN1_ENCODE_FUNCTIONS_const_fname(DSA, DSAPublicKey, DSAPublicKey)
 
@@ -188,10 +188,7 @@ int DSA_verify(int type, const unsigned char *dgst, int dgst_len,
         goto err;
     ret = DSA_do_verify(dgst, dgst_len, s, dsa);
  err:
-    if (derlen > 0) {
-        OPENSSL_cleanse(der, derlen);
-        OPENSSL_free(der);
-    }
+    OPENSSL_clear_free(der, derlen);
     DSA_SIG_free(s);
     return (ret);
 }

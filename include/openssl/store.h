@@ -180,8 +180,7 @@ typedef enum STORE_params {
     STORE_PARAM_KEY_PARAMETERS = 0x03, /* ??? */
     STORE_PARAM_KEY_NO_PARAMETERS = 0x04, /* N/A */
     STORE_PARAM_AUTH_PASSPHRASE = 0x05, /* char * */
-    STORE_PARAM_AUTH_KRB5_TICKET = 0x06, /* void * */
-    STORE_PARAM_TYPE_NUM = 0x06 /* The amount of known parameter types */
+    STORE_PARAM_TYPE_NUM = 0x05 /* The amount of known parameter types */
 } STORE_PARAM_TYPES;
 /*
  * Parameter value sizes.  -1 means unknown, anything else is the required
@@ -248,6 +247,15 @@ typedef struct STORE_OBJECT_st {
 DECLARE_STACK_OF(STORE_OBJECT)
 STORE_OBJECT *STORE_OBJECT_new(void);
 void STORE_OBJECT_free(STORE_OBJECT *data);
+
+/* A generic structure to pass assorted data in a expandable way */
+typedef struct openssl_item_st {
+    int code;
+    void *value;                /* Not used for flag attributes */
+    size_t value_size;          /* Max size of value for output, length for
+                                 * input */
+    size_t *value_length;       /* Returned length of value for output */
+} OPENSSL_ITEM;
 
 /*
  * The following functions handle the storage. They return 0, a negative

@@ -71,12 +71,6 @@
  */
 # ifdef OPENSSL_SYS_VMS
 
-/* Hack a long name in crypto/ex_data.c */
-#  undef CRYPTO_get_ex_data_implementation
-#  define CRYPTO_get_ex_data_implementation       CRYPTO_get_ex_data_impl
-#  undef CRYPTO_set_ex_data_implementation
-#  define CRYPTO_set_ex_data_implementation       CRYPTO_set_ex_data_impl
-
 /* Hack a long name in crypto/asn1/a_mbstr.c */
 #  undef ASN1_STRING_set_default_mask_asc
 #  define ASN1_STRING_set_default_mask_asc        ASN1_STRING_set_def_mask_asc
@@ -134,10 +128,6 @@
 #  define CRYPTO_get_dynlock_destroy_callback     CRYPTO_get_dynlock_destroy_cb
 #  undef CRYPTO_get_dynlock_create_callback
 #  define CRYPTO_get_dynlock_create_callback      CRYPTO_get_dynlock_create_cb
-#  undef CRYPTO_set_locked_mem_ex_functions
-#  define CRYPTO_set_locked_mem_ex_functions      CRYPTO_set_locked_mem_ex_funcs
-#  undef CRYPTO_get_locked_mem_ex_functions
-#  define CRYPTO_get_locked_mem_ex_functions      CRYPTO_get_locked_mem_ex_funcs
 
 /* Hack some long SSL/TLS names */
 #  undef SSL_CTX_set_default_verify_paths

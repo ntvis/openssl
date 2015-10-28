@@ -55,7 +55,7 @@ void main ()
 
   SSL_load_error_strings();
   SSLeay_add_ssl_algorithms();
-  meth = SSLv23_server_method();
+  meth = TLS_server_method();
   ctx = SSL_CTX_new (meth);
   if (!ctx) {
     ERR_print_errors_fp(stderr);
@@ -81,7 +81,7 @@ void main ()
 
   listen_sd = socket (AF_INET, SOCK_STREAM, 0);   CHK_ERR(listen_sd, "socket");
   
-  memset (&sa_serv, '\0', sizeof(sa_serv));
+  memset(&sa_serv, 0, sizeof(sa_serv));
   sa_serv.sin_family      = AF_INET;
   sa_serv.sin_addr.s_addr = INADDR_ANY;
   sa_serv.sin_port        = htons (1111);          /* Server Port number */

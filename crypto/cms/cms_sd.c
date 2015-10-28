@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -63,8 +63,6 @@
 #include "internal/asn1_int.h"
 
 /* CMS SignedData Utilities */
-
-DECLARE_ASN1_ITEM(CMS_SignedData)
 
 static CMS_SignedData *cms_get0_signed(CMS_ContentInfo *cms)
 {
@@ -285,7 +283,7 @@ CMS_SignerInfo *CMS_add1_signer(CMS_ContentInfo *cms,
     X509_check_purpose(signer, -1, -1);
 
     CRYPTO_add(&pk->references, 1, CRYPTO_LOCK_EVP_PKEY);
-    CRYPTO_add(&signer->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(signer);
 
     si->pkey = pk;
     si->signer = signer;
@@ -404,8 +402,7 @@ CMS_SignerInfo *CMS_add1_signer(CMS_ContentInfo *cms,
  merr:
     CMSerr(CMS_F_CMS_ADD1_SIGNER, ERR_R_MALLOC_FAILURE);
  err:
-    if (si)
-        M_ASN1_free_of(si, CMS_SignerInfo);
+    M_ASN1_free_of(si, CMS_SignerInfo);
     return NULL;
 
 }
@@ -486,12 +483,11 @@ STACK_OF(X509) *CMS_get0_signers(CMS_ContentInfo *cms)
 void CMS_SignerInfo_set1_signer_cert(CMS_SignerInfo *si, X509 *signer)
 {
     if (signer) {
-        CRYPTO_add(&signer->references, 1, CRYPTO_LOCK_X509);
+        X509_up_ref(signer);
         EVP_PKEY_free(si->pkey);
         si->pkey = X509_get_pubkey(signer);
     }
-    if (si->signer)
-        X509_free(si->signer);
+    X509_free(si->signer);
     si->signer = signer;
 }
 
@@ -730,8 +726,7 @@ int CMS_SignerInfo_sign(CMS_SignerInfo *si)
     return 1;
 
  err:
-    if (abuf)
-        OPENSSL_free(abuf);
+    OPENSSL_free(abuf);
     EVP_MD_CTX_cleanup(mctx);
     return 0;
 
@@ -904,8 +899,7 @@ int CMS_add_simple_smimecap(STACK_OF(X509_ALGOR) **algs,
     }
     alg = X509_ALGOR_new();
     if (!alg) {
-        if (key)
-            ASN1_INTEGER_free(key);
+        ASN1_INTEGER_free(key);
         return 0;
     }
 
@@ -939,6 +933,8 @@ static int cms_add_digest_smcap(STACK_OF(X509_ALGOR) **sk, int nid, int arg)
 int CMS_add_standard_smimecap(STACK_OF(X509_ALGOR) **smcap)
 {
     if (!cms_add_cipher_smcap(smcap, NID_aes_256_cbc, -1)
+        || !cms_add_digest_smcap(smcap, NID_id_GostR3411_2012_256, -1)
+        || !cms_add_digest_smcap(smcap, NID_id_GostR3411_2012_512, -1)
         || !cms_add_digest_smcap(smcap, NID_id_GostR3411_94, -1)
         || !cms_add_cipher_smcap(smcap, NID_id_Gost28147_89, -1)
         || !cms_add_cipher_smcap(smcap, NID_aes_192_cbc, -1)

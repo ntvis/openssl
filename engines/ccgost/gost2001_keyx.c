@@ -35,7 +35,7 @@ static int VKO_compute_key(unsigned char *shared_key, size_t shared_key_size,
         ukm_be[7 - i] = ukm[i];
     }
     BN_CTX_start(ctx);
-    UKM = getbnfrombuf(ukm_be, 8);
+    UKM = BN_bin2bn(ukm_be, 8, NULL);
     p = BN_CTX_get(ctx);
     order = BN_CTX_get(ctx);
     X = BN_CTX_get(ctx);
@@ -285,7 +285,6 @@ int pkey_GOST01cp_decrypt(EVP_PKEY_CTX *pctx, unsigned char *key,
     ret = 1;
  err:
     EVP_PKEY_free(eph_key);
-    if (gkt)
-        GOST_KEY_TRANSPORT_free(gkt);
+    GOST_KEY_TRANSPORT_free(gkt);
     return ret;
 }

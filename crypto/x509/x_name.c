@@ -1,4 +1,4 @@
-/* crypto/asn1/x_name.c */
+/* crypto/x509/x_name.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -58,7 +58,7 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include "internal/x509_int.h"
@@ -102,11 +102,11 @@ IMPLEMENT_ASN1_DUP_FUNCTION(X509_NAME_ENTRY)
 
 ASN1_ITEM_TEMPLATE(X509_NAME_ENTRIES) =
         ASN1_EX_TEMPLATE_TYPE(ASN1_TFLG_SET_OF, 0, RDNS, X509_NAME_ENTRY)
-ASN1_ITEM_TEMPLATE_END(X509_NAME_ENTRIES)
+static_ASN1_ITEM_TEMPLATE_END(X509_NAME_ENTRIES)
 
 ASN1_ITEM_TEMPLATE(X509_NAME_INTERNAL) =
         ASN1_EX_TEMPLATE_TYPE(ASN1_TFLG_SEQUENCE_OF, 0, Name, X509_NAME_ENTRIES)
-ASN1_ITEM_TEMPLATE_END(X509_NAME_INTERNAL)
+static_ASN1_ITEM_TEMPLATE_END(X509_NAME_INTERNAL)
 
 /*
  * Normally that's where it would end: we'd have two nested STACK structures
@@ -115,7 +115,7 @@ ASN1_ITEM_TEMPLATE_END(X509_NAME_INTERNAL)
  * convert to the external form.
  */
 
-const ASN1_EXTERN_FUNCS x509_name_ff = {
+static const ASN1_EXTERN_FUNCS x509_name_ff = {
     NULL,
     x509_name_ex_new,
     x509_name_ex_free,
@@ -133,16 +133,14 @@ IMPLEMENT_ASN1_DUP_FUNCTION(X509_NAME)
 
 static int x509_name_ex_new(ASN1_VALUE **val, const ASN1_ITEM *it)
 {
-    X509_NAME *ret = NULL;
-    ret = OPENSSL_malloc(sizeof(X509_NAME));
+    X509_NAME *ret = OPENSSL_zalloc(sizeof(*ret));
+
     if (!ret)
         goto memerr;
     if ((ret->entries = sk_X509_NAME_ENTRY_new_null()) == NULL)
         goto memerr;
     if ((ret->bytes = BUF_MEM_new()) == NULL)
         goto memerr;
-    ret->canon_enc = NULL;
-    ret->canon_enclen = 0;
     ret->modified = 1;
     *val = (ASN1_VALUE *)ret;
     return 1;
@@ -150,8 +148,7 @@ static int x509_name_ex_new(ASN1_VALUE **val, const ASN1_ITEM *it)
  memerr:
     ASN1err(ASN1_F_X509_NAME_EX_NEW, ERR_R_MALLOC_FAILURE);
     if (ret) {
-        if (ret->entries)
-            sk_X509_NAME_ENTRY_free(ret->entries);
+        sk_X509_NAME_ENTRY_free(ret->entries);
         OPENSSL_free(ret);
     }
     return 0;
@@ -160,14 +157,14 @@ static int x509_name_ex_new(ASN1_VALUE **val, const ASN1_ITEM *it)
 static void x509_name_ex_free(ASN1_VALUE **pval, const ASN1_ITEM *it)
 {
     X509_NAME *a;
+
     if (!pval || !*pval)
         return;
     a = (X509_NAME *)*pval;
 
     BUF_MEM_free(a->bytes);
     sk_X509_NAME_ENTRY_pop_free(a->entries, X509_NAME_ENTRY_free);
-    if (a->canon_enc)
-        OPENSSL_free(a->canon_enc);
+    OPENSSL_free(a->canon_enc);
     OPENSSL_free(a);
     *pval = NULL;
 }
@@ -232,8 +229,7 @@ static int x509_name_ex_d2i(ASN1_VALUE **val,
     *in = p;
     return ret;
  err:
-    if (nm.x != NULL)
-        X509_NAME_free(nm.x);
+    X509_NAME_free(nm.x);
     ASN1err(ASN1_F_X509_NAME_EX_D2I, ERR_R_NESTED_ASN1_ERROR);
     return 0;
 }
@@ -344,10 +340,8 @@ static int x509_name_canon(X509_NAME *a)
     X509_NAME_ENTRY *entry, *tmpentry = NULL;
     int i, set = -1, ret = 0;
 
-    if (a->canon_enc) {
-        OPENSSL_free(a->canon_enc);
-        a->canon_enc = NULL;
-    }
+    OPENSSL_free(a->canon_enc);
+    a->canon_enc = NULL;
     /* Special case: empty X509_NAME => null encoding */
     if (sk_X509_NAME_ENTRY_num(a->entries) == 0) {
         a->canon_enclen = 0;
@@ -394,11 +388,9 @@ static int x509_name_canon(X509_NAME *a)
 
  err:
 
-    if (tmpentry)
-        X509_NAME_ENTRY_free(tmpentry);
-    if (intname)
-        sk_STACK_OF_X509_NAME_ENTRY_pop_free(intname,
-                                             local_sk_X509_NAME_ENTRY_pop_free);
+    X509_NAME_ENTRY_free(tmpentry);
+    sk_STACK_OF_X509_NAME_ENTRY_pop_free(intname,
+                                         local_sk_X509_NAME_ENTRY_pop_free);
     return ret;
 }
 
@@ -521,4 +513,60 @@ int X509_NAME_set(X509_NAME **xn, X509_NAME *name)
         }
     }
     return (*xn != NULL);
+}
+
+int X509_NAME_print(BIO *bp, X509_NAME *name, int obase)
+{
+    char *s, *c, *b;
+    int l, i;
+
+    l = 80 - 2 - obase;
+
+    b = X509_NAME_oneline(name, NULL, 0);
+    if (!b)
+        return 0;
+    if (!*b) {
+        OPENSSL_free(b);
+        return 1;
+    }
+    s = b + 1;                  /* skip the first slash */
+
+    c = s;
+    for (;;) {
+#ifndef CHARSET_EBCDIC
+        if (((*s == '/') &&
+             ((s[1] >= 'A') && (s[1] <= 'Z') && ((s[2] == '=') ||
+                                                 ((s[2] >= 'A')
+                                                  && (s[2] <= 'Z')
+                                                  && (s[3] == '='))
+              ))) || (*s == '\0'))
+#else
+        if (((*s == '/') &&
+             (isupper(s[1]) && ((s[2] == '=') ||
+                                (isupper(s[2]) && (s[3] == '='))
+              ))) || (*s == '\0'))
+#endif
+        {
+            i = s - c;
+            if (BIO_write(bp, c, i) != i)
+                goto err;
+            c = s + 1;          /* skip following slash */
+            if (*s != '\0') {
+                if (BIO_write(bp, ", ", 2) != 2)
+                    goto err;
+            }
+            l--;
+        }
+        if (*s == '\0')
+            break;
+        s++;
+        l--;
+    }
+
+    OPENSSL_free(b);
+    return 1;
+ err:
+    X509err(X509_F_X509_NAME_PRINT, ERR_R_BUF_LIB);
+    OPENSSL_free(b);
+    return 0;
 }

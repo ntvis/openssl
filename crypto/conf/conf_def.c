@@ -60,7 +60,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/stack.h>
 #include <openssl/lhash.h>
 #include <openssl/conf.h>
@@ -87,8 +87,6 @@ static int def_load_bio(CONF *conf, BIO *bp, long *eline);
 static int def_dump(const CONF *conf, BIO *bp);
 static int def_is_number(const CONF *conf, char c);
 static int def_to_int(const CONF *conf, char c);
-
-const char CONF_def_version[] = "CONF_def" OPENSSL_VERSION_PTEXT;
 
 static CONF_METHOD default_method = {
     "OpenSSL default",
@@ -130,7 +128,7 @@ static CONF *def_create(CONF_METHOD *meth)
 {
     CONF *ret;
 
-    ret = OPENSSL_malloc(sizeof(CONF) + sizeof(unsigned short *));
+    ret = OPENSSL_malloc(sizeof(*ret));
     if (ret)
         if (meth->init(ret) == 0) {
             OPENSSL_free(ret);
@@ -225,12 +223,11 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
         goto err;
     }
 
-    section = (char *)OPENSSL_malloc(10);
+    section = BUF_strdup("default");
     if (section == NULL) {
         CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
         goto err;
     }
-    BUF_strlcpy(section, "default", 10);
 
     if (_CONF_new_data(conf) == 0) {
         CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
@@ -357,13 +354,13 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
             p++;
             *p = '\0';
 
-            if (!(v = (CONF_VALUE *)OPENSSL_malloc(sizeof(CONF_VALUE)))) {
+            if ((v = OPENSSL_malloc(sizeof(*v))) == NULL) {
                 CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
                 goto err;
             }
             if (psection == NULL)
                 psection = section;
-            v->name = (char *)OPENSSL_malloc(strlen(pname) + 1);
+            v->name = OPENSSL_malloc(strlen(pname) + 1);
             v->value = NULL;
             if (v->name == NULL) {
                 CONFerr(CONF_F_DEF_LOAD_BIO, ERR_R_MALLOC_FAILURE);
@@ -391,31 +388,24 @@ static int def_load_bio(CONF *conf, BIO *in, long *line)
             v = NULL;
         }
     }
-    if (buff != NULL)
-        BUF_MEM_free(buff);
-    if (section != NULL)
-        OPENSSL_free(section);
+    BUF_MEM_free(buff);
+    OPENSSL_free(section);
     return (1);
  err:
-    if (buff != NULL)
-        BUF_MEM_free(buff);
-    if (section != NULL)
-        OPENSSL_free(section);
+    BUF_MEM_free(buff);
+    OPENSSL_free(section);
     if (line != NULL)
         *line = eline;
     BIO_snprintf(btmp, sizeof btmp, "%ld", eline);
     ERR_add_error_data(2, "line ", btmp);
-    if ((h != conf->data) && (conf->data != NULL)) {
+    if (h != conf->data) {
         CONF_free(conf->data);
         conf->data = NULL;
     }
     if (v != NULL) {
-        if (v->name != NULL)
-            OPENSSL_free(v->name);
-        if (v->value != NULL)
-            OPENSSL_free(v->value);
-        if (v != NULL)
-            OPENSSL_free(v);
+        OPENSSL_free(v->name);
+        OPENSSL_free(v->value);
+        OPENSSL_free(v);
     }
     return (0);
 }
@@ -595,14 +585,12 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
             buf->data[to++] = *(from++);
     }
     buf->data[to] = '\0';
-    if (*pto != NULL)
-        OPENSSL_free(*pto);
+    OPENSSL_free(*pto);
     *pto = buf->data;
     OPENSSL_free(buf);
     return (1);
  err:
-    if (buf != NULL)
-        BUF_MEM_free(buf);
+    BUF_MEM_free(buf);
     return (0);
 }
 

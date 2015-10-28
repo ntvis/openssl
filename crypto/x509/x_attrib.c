@@ -1,4 +1,4 @@
-/* crypto/asn1/x_attrib.c */
+/* crypto/x509/x_attrib.c */
 /* Copyright (C) 1995-1998 Eric Young (eay@cryptsoft.com)
  * All rights reserved.
  *
@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
@@ -98,9 +98,7 @@ X509_ATTRIBUTE *X509_ATTRIBUTE_create(int nid, int atrtype, void *value)
     ASN1_TYPE_set(val, atrtype, value);
     return (ret);
  err:
-    if (ret != NULL)
-        X509_ATTRIBUTE_free(ret);
-    if (val != NULL)
-        ASN1_TYPE_free(val);
+    X509_ATTRIBUTE_free(ret);
+    ASN1_TYPE_free(val);
     return (NULL);
 }

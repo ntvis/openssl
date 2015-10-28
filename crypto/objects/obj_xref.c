@@ -59,9 +59,11 @@
 
 #include <openssl/objects.h>
 #include "obj_xref.h"
+#include "e_os.h"
 
 DECLARE_STACK_OF(nid_triple)
-STACK_OF(nid_triple) *sig_app, *sigx_app;
+
+static STACK_OF(nid_triple) *sig_app, *sigx_app;
 
 static int sig_cmp(const nid_triple *a, const nid_triple *b)
 {
@@ -102,8 +104,7 @@ int OBJ_find_sigid_algs(int signid, int *pdig_nid, int *ppkey_nid)
     }
 #ifndef OBJ_XREF_TEST2
     if (rv == NULL) {
-        rv = OBJ_bsearch_sig(&tmp, sigoid_srt,
-                             sizeof(sigoid_srt) / sizeof(nid_triple));
+        rv = OBJ_bsearch_sig(&tmp, sigoid_srt, OSSL_NELEM(sigoid_srt));
     }
 #endif
     if (rv == NULL)
@@ -133,9 +134,7 @@ int OBJ_find_sigid_by_algs(int *psignid, int dig_nid, int pkey_nid)
     }
 #ifndef OBJ_XREF_TEST2
     if (rv == NULL) {
-        rv = OBJ_bsearch_sigx(&t, sigoid_srt_xref,
-                              sizeof(sigoid_srt_xref) / sizeof(nid_triple *)
-            );
+        rv = OBJ_bsearch_sigx(&t, sigoid_srt_xref, OSSL_NELEM(sigoid_srt_xref));
     }
 #endif
     if (rv == NULL)
@@ -156,7 +155,7 @@ int OBJ_add_sigid(int signid, int dig_id, int pkey_id)
         sigx_app = sk_nid_triple_new(sigx_cmp);
     if (!sigx_app)
         return 0;
-    ntr = OPENSSL_malloc(sizeof(int) * 3);
+    ntr = OPENSSL_malloc(sizeof(*ntr));
     if (!ntr)
         return 0;
     ntr->sign_id = signid;
@@ -184,14 +183,10 @@ static void sid_free(nid_triple *tt)
 
 void OBJ_sigid_free(void)
 {
-    if (sig_app) {
-        sk_nid_triple_pop_free(sig_app, sid_free);
-        sig_app = NULL;
-    }
-    if (sigx_app) {
-        sk_nid_triple_free(sigx_app);
-        sigx_app = NULL;
-    }
+    sk_nid_triple_pop_free(sig_app, sid_free);
+    sig_app = NULL;
+    sk_nid_triple_free(sigx_app);
+    sigx_app = NULL;
 }
 
 #ifdef OBJ_XREF_TEST
@@ -202,12 +197,12 @@ main()
 
     int i, rv;
 # ifdef OBJ_XREF_TEST2
-    for (i = 0; i < sizeof(sigoid_srt) / sizeof(nid_triple); i++) {
+    for (i = 0; i < OSSL_NELEM(sigoid_srt); i++) {
         OBJ_add_sigid(sigoid_srt[i][0], sigoid_srt[i][1], sigoid_srt[i][2]);
     }
 # endif
 
-    for (i = 0; i < sizeof(sigoid_srt) / sizeof(nid_triple); i++) {
+    for (i = 0; i < OSSL_NELEM(sigoid_srt); i++) {
         n1 = sigoid_srt[i][0];
         rv = OBJ_find_sigid_algs(n1, &n2, &n3);
         printf("Forward: %d, %s %s %s\n", rv,

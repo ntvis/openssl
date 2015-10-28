@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/ec.h>
@@ -91,22 +91,14 @@ typedef struct {
 static int pkey_ec_init(EVP_PKEY_CTX *ctx)
 {
     EC_PKEY_CTX *dctx;
-    dctx = OPENSSL_malloc(sizeof(EC_PKEY_CTX));
+
+    dctx = OPENSSL_zalloc(sizeof(*dctx));
     if (!dctx)
         return 0;
-    dctx->gen_group = NULL;
-    dctx->md = NULL;
 
     dctx->cofactor_mode = -1;
-    dctx->co_key = NULL;
     dctx->kdf_type = EVP_PKEY_ECDH_KDF_NONE;
-    dctx->kdf_md = NULL;
-    dctx->kdf_outlen = 0;
-    dctx->kdf_ukm = NULL;
-    dctx->kdf_ukmlen = 0;
-
     ctx->data = dctx;
-
     return 1;
 }
 
@@ -148,8 +140,7 @@ static void pkey_ec_cleanup(EVP_PKEY_CTX *ctx)
     if (dctx) {
         EC_GROUP_free(dctx->gen_group);
         EC_KEY_free(dctx->co_key);
-        if (dctx->kdf_ukm)
-            OPENSSL_free(dctx->kdf_ukm);
+        OPENSSL_free(dctx->kdf_ukm);
         OPENSSL_free(dctx);
     }
 }
@@ -268,10 +259,7 @@ static int pkey_ec_kdf_derive(EVP_PKEY_CTX *ctx,
     rv = 1;
 
  err:
-    if (ktmp) {
-        OPENSSL_cleanse(ktmp, ktmplen);
-        OPENSSL_free(ktmp);
-    }
+    OPENSSL_clear_free(ktmp, ktmplen);
     return rv;
 }
 #endif
@@ -362,8 +350,7 @@ static int pkey_ec_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
         return 1;
 
     case EVP_PKEY_CTRL_EC_KDF_UKM:
-        if (dctx->kdf_ukm)
-            OPENSSL_free(dctx->kdf_ukm);
+        OPENSSL_free(dctx->kdf_ukm);
         dctx->kdf_ukm = p2;
         if (p2)
             dctx->kdf_ukmlen = p1;
@@ -408,7 +395,7 @@ static int pkey_ec_ctrl(EVP_PKEY_CTX *ctx, int type, int p1, void *p2)
 static int pkey_ec_ctrl_str(EVP_PKEY_CTX *ctx,
                             const char *type, const char *value)
 {
-    if (!strcmp(type, "ec_paramgen_curve")) {
+    if (strcmp(type, "ec_paramgen_curve") == 0) {
         int nid;
         nid = EC_curve_nist2nid(value);
         if (nid == NID_undef)
@@ -420,23 +407,23 @@ static int pkey_ec_ctrl_str(EVP_PKEY_CTX *ctx,
             return 0;
         }
         return EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, nid);
-    } else if (!strcmp(type, "ec_param_enc")) {
+    } else if (strcmp(type, "ec_param_enc") == 0) {
         int param_enc;
-        if (!strcmp(value, "explicit"))
+        if (strcmp(value, "explicit") == 0)
             param_enc = 0;
-        else if (!strcmp(value, "named_curve"))
+        else if (strcmp(value, "named_curve") == 0)
             param_enc = OPENSSL_EC_NAMED_CURVE;
         else
             return -2;
         return EVP_PKEY_CTX_set_ec_param_enc(ctx, param_enc);
-    } else if (!strcmp(type, "ecdh_kdf_md")) {
+    } else if (strcmp(type, "ecdh_kdf_md") == 0) {
         const EVP_MD *md;
-        if (!(md = EVP_get_digestbyname(value))) {
+        if ((md = EVP_get_digestbyname(value)) == NULL) {
             ECerr(EC_F_PKEY_EC_CTRL_STR, EC_R_INVALID_DIGEST);
             return 0;
         }
         return EVP_PKEY_CTX_set_ecdh_kdf_md(ctx, md);
-    } else if (!strcmp(type, "ecdh_cofactor_mode")) {
+    } else if (strcmp(type, "ecdh_cofactor_mode") == 0) {
         int co_mode;
         co_mode = atoi(value);
         return EVP_PKEY_CTX_set_ecdh_cofactor_mode(ctx, co_mode);

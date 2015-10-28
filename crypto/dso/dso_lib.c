@@ -59,7 +59,7 @@
 
 #include <stdio.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/dso.h>
 
 static DSO_METHOD *default_DSO_meth = NULL;
@@ -96,19 +96,19 @@ DSO *DSO_new_method(DSO_METHOD *meth)
 {
     DSO *ret;
 
-    if (default_DSO_meth == NULL)
+    if (default_DSO_meth == NULL) {
         /*
          * We default to DSO_METH_openssl() which in turn defaults to
          * stealing the "best available" method. Will fallback to
          * DSO_METH_null() in the worst case.
          */
         default_DSO_meth = DSO_METHOD_openssl();
-    ret = (DSO *)OPENSSL_malloc(sizeof(DSO));
+    }
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         DSOerr(DSO_F_DSO_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    memset(ret, 0, sizeof(DSO));
     ret->meth_data = sk_void_new_null();
     if (ret->meth_data == NULL) {
         /* sk_new doesn't generate any errors so we do */
@@ -132,10 +132,8 @@ int DSO_free(DSO *dso)
 {
     int i;
 
-    if (dso == NULL) {
-        DSOerr(DSO_F_DSO_FREE, ERR_R_PASSED_NULL_PARAMETER);
-        return (0);
-    }
+    if (dso == NULL)
+        return (1);
 
     i = CRYPTO_add(&dso->references, -1, CRYPTO_LOCK_DSO);
 #ifdef REF_PRINT
@@ -161,11 +159,8 @@ int DSO_free(DSO *dso)
     }
 
     sk_void_free(dso->meth_data);
-    if (dso->filename != NULL)
-        OPENSSL_free(dso->filename);
-    if (dso->loaded_filename != NULL)
-        OPENSSL_free(dso->loaded_filename);
-
+    OPENSSL_free(dso->filename);
+    OPENSSL_free(dso->loaded_filename);
     OPENSSL_free(dso);
     return (1);
 }
@@ -359,8 +354,7 @@ int DSO_set_filename(DSO *dso, const char *filename)
         return (0);
     }
     BUF_strlcpy(copied, filename, strlen(filename) + 1);
-    if (dso->filename)
-        OPENSSL_free(dso->filename);
+    OPENSSL_free(dso->filename);
     dso->filename = copied;
     return (1);
 }

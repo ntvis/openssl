@@ -109,7 +109,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "internal/bn_int.h"
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
@@ -239,14 +239,10 @@ static int RSA_eay_public_encrypt(int flen, const unsigned char *from,
 
     r = num;
  err:
-    if (ctx != NULL) {
+    if (ctx != NULL)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (buf != NULL) {
-        OPENSSL_cleanse(buf, num);
-        OPENSSL_free(buf);
-    }
+    BN_CTX_free(ctx);
+    OPENSSL_clear_free(buf, num);
     return (r);
 }
 
@@ -437,19 +433,16 @@ static int RSA_eay_private_encrypt(int flen, const unsigned char *from,
         if (rsa->flags & RSA_FLAG_CACHE_PUBLIC)
             if (!BN_MONT_CTX_set_locked
                 (&rsa->_method_mod_n, CRYPTO_LOCK_RSA, rsa->n, ctx)) {
-                if (local_d)
-                    BN_free(local_d);
+                BN_free(local_d);
                 goto err;
             }
 
         if (!rsa->meth->bn_mod_exp(ret, f, d, rsa->n, ctx,
                                    rsa->_method_mod_n)) {
-            if (local_d)
-                BN_free(local_d);
+            BN_free(local_d);
             goto err;
         }
-        if (local_d)
-            BN_free(local_d);
+        BN_free(local_d);
     }
 
     if (blinding)
@@ -476,14 +469,10 @@ static int RSA_eay_private_encrypt(int flen, const unsigned char *from,
 
     r = num;
  err:
-    if (ctx != NULL) {
+    if (ctx != NULL)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (buf != NULL) {
-        OPENSSL_cleanse(buf, num);
-        OPENSSL_free(buf);
-    }
+    BN_CTX_free(ctx);
+    OPENSSL_clear_free(buf, num);
     return (r);
 }
 
@@ -576,18 +565,15 @@ static int RSA_eay_private_decrypt(int flen, const unsigned char *from,
         if (rsa->flags & RSA_FLAG_CACHE_PUBLIC)
             if (!BN_MONT_CTX_set_locked
                 (&rsa->_method_mod_n, CRYPTO_LOCK_RSA, rsa->n, ctx)) {
-                if (local_d)
-                    BN_free(local_d);
+                BN_free(local_d);
                 goto err;
             }
         if (!rsa->meth->bn_mod_exp(ret, f, d, rsa->n, ctx,
                                    rsa->_method_mod_n)) {
-            if (local_d)
-                BN_free(local_d);
+            BN_free(local_d);
             goto err;
         }
-        if (local_d)
-            BN_free(local_d);
+        BN_free(local_d);
     }
 
     if (blinding)
@@ -618,14 +604,10 @@ static int RSA_eay_private_decrypt(int flen, const unsigned char *from,
         RSAerr(RSA_F_RSA_EAY_PRIVATE_DECRYPT, RSA_R_PADDING_CHECK_FAILED);
 
  err:
-    if (ctx != NULL) {
+    if (ctx != NULL)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (buf != NULL) {
-        OPENSSL_cleanse(buf, num);
-        OPENSSL_free(buf);
-    }
+    BN_CTX_free(ctx);
+    OPENSSL_clear_free(buf, num);
     return (r);
 }
 
@@ -721,14 +703,10 @@ static int RSA_eay_public_decrypt(int flen, const unsigned char *from,
         RSAerr(RSA_F_RSA_EAY_PUBLIC_DECRYPT, RSA_R_PADDING_CHECK_FAILED);
 
  err:
-    if (ctx != NULL) {
+    if (ctx != NULL)
         BN_CTX_end(ctx);
-        BN_CTX_free(ctx);
-    }
-    if (buf != NULL) {
-        OPENSSL_cleanse(buf, num);
-        OPENSSL_free(buf);
-    }
+    BN_CTX_free(ctx);
+    OPENSSL_clear_free(buf, num);
     return (r);
 }
 
@@ -739,6 +717,8 @@ static int RSA_eay_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
     BIGNUM *dmp1, *dmq1, *c, *pr1;
     int ret = 0;
 
+    BN_CTX_start(ctx);
+
     local_dmp1 = BN_new();
     local_dmq1 = BN_new();
     local_c = BN_new();
@@ -746,7 +726,6 @@ static int RSA_eay_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
     if (!local_dmp1 || !local_dmq1 || !local_c || !local_r1)
         goto err;
 
-    BN_CTX_start(ctx);
     r1 = BN_CTX_get(ctx);
     m1 = BN_CTX_get(ctx);
     vrfy = BN_CTX_get(ctx);
@@ -781,17 +760,13 @@ static int RSA_eay_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
                 (&rsa->_method_mod_p, CRYPTO_LOCK_RSA, p, ctx)
                 || !BN_MONT_CTX_set_locked(&rsa->_method_mod_q,
                                            CRYPTO_LOCK_RSA, q, ctx)) {
-                if (local_p)
-                    BN_free(local_p);
-                if (local_q)
-                    BN_free(local_q);
+                BN_free(local_p);
+                BN_free(local_q);
                 goto err;
             }
         }
-        if (local_p)
-            BN_free(local_p);
-        if (local_q)
-            BN_free(local_q);
+        BN_free(local_p);
+        BN_free(local_q);
     }
 
     if (rsa->flags & RSA_FLAG_CACHE_PUBLIC)
@@ -912,25 +887,19 @@ static int RSA_eay_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx)
                 d = rsa->d;
             if (!rsa->meth->bn_mod_exp(r0, I, d, rsa->n, ctx,
                                        rsa->_method_mod_n)) {
-                if (local_d)
-                    BN_free(local_d);
+                BN_free(local_d);
                 goto err;
             }
 
-            if (local_d)
-                BN_free(local_d);
+            BN_free(local_d);
         }
     }
     ret = 1;
  err:
-    if (local_dmp1)
-        BN_free(local_dmp1);
-    if (local_dmq1)
-        BN_free(local_dmq1);
-    if (local_c)
-        BN_free(local_c);
-    if (local_r1)
-        BN_free(local_r1);
+    BN_free(local_dmp1);
+    BN_free(local_dmq1);
+    BN_free(local_c);
+    BN_free(local_r1);
     BN_CTX_end(ctx);
     return (ret);
 }
@@ -943,12 +912,9 @@ static int RSA_eay_init(RSA *rsa)
 
 static int RSA_eay_finish(RSA *rsa)
 {
-    if (rsa->_method_mod_n != NULL)
-        BN_MONT_CTX_free(rsa->_method_mod_n);
-    if (rsa->_method_mod_p != NULL)
-        BN_MONT_CTX_free(rsa->_method_mod_p);
-    if (rsa->_method_mod_q != NULL)
-        BN_MONT_CTX_free(rsa->_method_mod_q);
+    BN_MONT_CTX_free(rsa->_method_mod_n);
+    BN_MONT_CTX_free(rsa->_method_mod_p);
+    BN_MONT_CTX_free(rsa->_method_mod_q);
     return (1);
 }
 

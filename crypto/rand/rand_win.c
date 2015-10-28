@@ -109,7 +109,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/rand.h>
 #include "rand_lcl.h"
 
@@ -196,7 +196,7 @@ typedef NET_API_STATUS(NET_API_FUNCTION *NETFREE) (LPBYTE);
 
 int RAND_poll(void)
 {
-    MEMORYSTATUS m;
+    MEMORYSTATUS mst;
     HCRYPTPROV hProvider = 0;
     DWORD w;
     int good = 0;
@@ -558,8 +558,8 @@ int RAND_poll(void)
     readtimer();
 
     /* memory usage statistics */
-    GlobalMemoryStatus(&m);
-    RAND_add(&m, sizeof(m), 1);
+    GlobalMemoryStatus(&mst);
+    RAND_add(&mst, sizeof(mst), 1);
 
     /* process ID */
     w = GetCurrentProcessId();

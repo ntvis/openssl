@@ -60,7 +60,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #define USE_SOCKETS
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bio.h>
 #if defined(OPENSSL_SYS_NETWARE) && defined(NETWARE_BSDSOCK)
 # include <netdb.h>
@@ -391,7 +391,7 @@ int BIO_get_accept_socket(char *host, int bind_mode)
         struct sockaddr_in6 sa_in6;
 # endif
     } server, client;
-    int s = INVALID_SOCKET, cs, addrlen;
+    int s = (int)INVALID_SOCKET, cs, addrlen;
     unsigned char ip[4];
     unsigned short port;
     char *str = NULL, *e;
@@ -400,10 +400,10 @@ int BIO_get_accept_socket(char *host, int bind_mode)
     int err_num;
 
     if (BIO_sock_init() != 1)
-        return (INVALID_SOCKET);
+        return ((int)INVALID_SOCKET);
 
     if ((str = BUF_strdup(host)) == NULL)
-        return (INVALID_SOCKET);
+        return ((int)INVALID_SOCKET);
 
     h = p = NULL;
     h = str;
@@ -484,7 +484,7 @@ int BIO_get_accept_socket(char *host, int bind_mode)
     if (!BIO_get_port(p, &port))
         goto err;
 
-    memset((char *)&server, 0, sizeof(server));
+    memset(&server, 0, sizeof(server));
     server.sa_in.sin_family = AF_INET;
     server.sa_in.sin_port = htons(port);
     addrlen = sizeof(server.sa_in);
@@ -503,7 +503,7 @@ int BIO_get_accept_socket(char *host, int bind_mode)
 
  again:
     s = socket(server.sa.sa_family, SOCK_STREAM, SOCKET_PROTOCOL);
-    if (s == INVALID_SOCKET) {
+    if (s == (int)INVALID_SOCKET) {
         SYSerr(SYS_F_SOCKET, get_last_socket_error());
         ERR_add_error_data(3, "port='", host, "'");
         BIOerr(BIO_F_BIO_GET_ACCEPT_SOCKET, BIO_R_UNABLE_TO_CREATE_SOCKET);
@@ -545,11 +545,11 @@ int BIO_get_accept_socket(char *host, int bind_mode)
                     goto err;
             }
             cs = socket(client.sa.sa_family, SOCK_STREAM, SOCKET_PROTOCOL);
-            if (cs != INVALID_SOCKET) {
+            if (cs != (int)INVALID_SOCKET) {
                 int ii;
                 ii = connect(cs, &client.sa, addrlen);
                 closesocket(cs);
-                if (ii == INVALID_SOCKET) {
+                if (ii == (int)INVALID_SOCKET) {
                     bind_mode = BIO_BIND_REUSEADDR;
                     closesocket(s);
                     goto again;
@@ -572,18 +572,17 @@ int BIO_get_accept_socket(char *host, int bind_mode)
     }
     ret = 1;
  err:
-    if (str != NULL)
-        OPENSSL_free(str);
-    if ((ret == 0) && (s != INVALID_SOCKET)) {
+    OPENSSL_free(str);
+    if ((ret == 0) && (s != (int)INVALID_SOCKET)) {
         closesocket(s);
-        s = INVALID_SOCKET;
+        s = (int)INVALID_SOCKET;
     }
     return (s);
 }
 
 int BIO_accept(int sock, char **addr)
 {
-    int ret = INVALID_SOCKET;
+    int ret = (int)INVALID_SOCKET;
     unsigned long l;
     unsigned short port;
     char *p;
@@ -632,7 +631,7 @@ int BIO_accept(int sock, char **addr)
         sa.len.i = (int)sa.len.s;
         /* use sa.len.i from this point */
     }
-    if (ret == INVALID_SOCKET) {
+    if (ret == (int)INVALID_SOCKET) {
         if (BIO_sock_should_retry(ret))
             return -2;
         SYSerr(SYS_F_ACCEPT, get_last_socket_error());
@@ -673,12 +672,9 @@ int BIO_accept(int sock, char **addr)
             break;
         nl = strlen(h) + strlen(s) + 2;
         p = *addr;
-        if (p) {
+        if (p)
             *p = '\0';
-            p = OPENSSL_realloc(p, nl);
-        } else {
-            p = OPENSSL_malloc(nl);
-        }
+        p = OPENSSL_realloc(p, nl);
         if (p == NULL) {
             BIOerr(BIO_F_BIO_ACCEPT, ERR_R_MALLOC_FAILURE);
             goto end;

@@ -43,7 +43,7 @@ char *argv[];
 
     /* Setup all the global SSL stuff */
     OpenSSL_add_ssl_algorithms();
-    ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+    ssl_ctx = SSL_CTX_new(TLS_client_method());
 
     /* Lets make a SSL structure */
     ssl = SSL_new(ssl_ctx);
@@ -96,17 +96,16 @@ char *argv[];
     }
 
     ret = 1;
+    goto done;
 
-    if (0) {
  err:
-        if (ERR_peek_error() == 0) { /* system call error */
-            fprintf(stderr, "errno=%d ", errno);
-            perror("error");
-        } else
-            ERR_print_errors_fp(stderr);
-    }
+    if (ERR_peek_error() == 0) { /* system call error */
+        fprintf(stderr, "errno=%d ", errno);
+        perror("error");
+    } else
+        ERR_print_errors_fp(stderr);
+ done:
     BIO_free_all(out);
     SSL_CTX_free(ssl_ctx);
-    exit(!ret);
-    return (ret);
+    return (ret == 1);
 }

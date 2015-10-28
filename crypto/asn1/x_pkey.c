@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/objects.h>
 #include <openssl/x509.h>
@@ -66,23 +66,16 @@ X509_PKEY *X509_PKEY_new(void)
 {
     X509_PKEY *ret = NULL;
 
-    ret = OPENSSL_malloc(sizeof(X509_PKEY));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (!ret)
         goto err;
-    memset(ret, 0, sizeof(X509_PKEY));
 
-    ret->version = 0;
+    ret->references = 1;
     ret->enc_algor = X509_ALGOR_new();
     ret->enc_pkey = ASN1_OCTET_STRING_new();
     if (!ret->enc_algor || !ret->enc_pkey)
         goto err;
-    ret->dec_pkey = NULL;
-    ret->key_length = 0;
-    ret->key_data = NULL;
-    ret->key_free = 0;
-    ret->cipher.cipher = NULL;
-    memset(ret->cipher.iv, 0, EVP_MAX_IV_LENGTH);
-    ret->references = 1;
+
     return ret;
 err:
     X509_PKEY_free(ret);
@@ -110,11 +103,10 @@ void X509_PKEY_free(X509_PKEY *x)
     }
 #endif
 
-    if (x->enc_algor != NULL)
-        X509_ALGOR_free(x->enc_algor);
+    X509_ALGOR_free(x->enc_algor);
     ASN1_OCTET_STRING_free(x->enc_pkey);
     EVP_PKEY_free(x->dec_pkey);
-    if ((x->key_data != NULL) && (x->key_free))
+    if (x->key_free)
         OPENSSL_free(x->key_data);
     OPENSSL_free(x);
 }

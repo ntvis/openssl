@@ -58,7 +58,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/rsa.h>
@@ -68,10 +68,12 @@
 #endif
 #include "internal/asn1_int.h"
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_sign(CMS_SignerInfo *si);
 static int rsa_cms_verify(CMS_SignerInfo *si);
 static int rsa_cms_decrypt(CMS_RecipientInfo *ri);
 static int rsa_cms_encrypt(CMS_RecipientInfo *ri);
+#endif
 
 static int rsa_pub_encode(X509_PUBKEY *pk, const EVP_PKEY *pkey)
 {
@@ -93,9 +95,10 @@ static int rsa_pub_decode(EVP_PKEY *pkey, X509_PUBKEY *pubkey)
     const unsigned char *p;
     int pklen;
     RSA *rsa = NULL;
+
     if (!X509_PUBKEY_get0_param(NULL, &p, &pklen, NULL, pubkey))
         return 0;
-    if (!(rsa = d2i_RSAPublicKey(NULL, &p, pklen))) {
+    if ((rsa = d2i_RSAPublicKey(NULL, &p, pklen)) == NULL) {
         RSAerr(RSA_F_RSA_PUB_DECODE, ERR_R_RSA_LIB);
         return 0;
     }
@@ -115,7 +118,8 @@ static int old_rsa_priv_decode(EVP_PKEY *pkey,
                                const unsigned char **pder, int derlen)
 {
     RSA *rsa;
-    if (!(rsa = d2i_RSAPrivateKey(NULL, pder, derlen))) {
+
+    if ((rsa = d2i_RSAPrivateKey(NULL, pder, derlen)) == NULL) {
         RSAerr(RSA_F_OLD_RSA_PRIV_DECODE, ERR_R_RSA_LIB);
         return 0;
     }
@@ -206,7 +210,7 @@ static int do_rsa_print(BIO *bp, const RSA *x, int off, int priv)
         update_buflen(x->iqmp, &buf_len);
     }
 
-    m = (unsigned char *)OPENSSL_malloc(buf_len + 10);
+    m = OPENSSL_malloc(buf_len + 10);
     if (m == NULL) {
         RSAerr(RSA_F_DO_RSA_PRINT, ERR_R_MALLOC_FAILURE);
         goto err;
@@ -251,8 +255,7 @@ static int do_rsa_print(BIO *bp, const RSA *x, int off, int priv)
     }
     ret = 1;
  err:
-    if (m != NULL)
-        OPENSSL_free(m);
+    OPENSSL_free(m);
     return (ret);
 }
 
@@ -379,10 +382,8 @@ static int rsa_sig_print(BIO *bp, const X509_ALGOR *sigalg,
         X509_ALGOR *maskHash;
         pss = rsa_pss_decode(sigalg, &maskHash);
         rv = rsa_pss_param_print(bp, pss, maskHash, indent);
-        if (pss)
-            RSA_PSS_PARAMS_free(pss);
-        if (maskHash)
-            X509_ALGOR_free(maskHash);
+        RSA_PSS_PARAMS_free(pss);
+        X509_ALGOR_free(maskHash);
         if (!rv)
             return 0;
     } else if (!sig && BIO_puts(bp, "\n") <= 0)
@@ -474,8 +475,7 @@ static int rsa_md_to_mgf1(X509_ALGOR **palg, const EVP_MD *mgf1md)
     stmp = NULL;
  err:
     ASN1_STRING_free(stmp);
-    if (algtmp)
-        X509_ALGOR_free(algtmp);
+    X509_ALGOR_free(algtmp);
     if (*palg)
         return 1;
     return 0;
@@ -560,8 +560,7 @@ static ASN1_STRING *rsa_ctx_to_pss(EVP_PKEY_CTX *pkctx)
          goto err;
     rv = 1;
  err:
-    if (pss)
-        RSA_PSS_PARAMS_free(pss);
+    RSA_PSS_PARAMS_free(pss);
     if (rv)
         return os;
     ASN1_STRING_free(os);
@@ -652,11 +651,11 @@ static int rsa_pss_to_ctx(EVP_MD_CTX *ctx, EVP_PKEY_CTX *pkctx,
 
  err:
     RSA_PSS_PARAMS_free(pss);
-    if (maskHash)
-        X509_ALGOR_free(maskHash);
+    X509_ALGOR_free(maskHash);
     return rv;
 }
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_verify(CMS_SignerInfo *si)
 {
     int nid, nid2;
@@ -675,6 +674,7 @@ static int rsa_cms_verify(CMS_SignerInfo *si)
     }
     return 0;
 }
+#endif
 
 /*
  * Customised RSA item verification routine. This is called when a signature
@@ -697,6 +697,7 @@ static int rsa_item_verify(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
     return -1;
 }
 
+#ifndef OPENSSL_NO_CMS
 static int rsa_cms_sign(CMS_SignerInfo *si)
 {
     int pad_mode = RSA_PKCS1_PADDING;
@@ -721,6 +722,7 @@ static int rsa_cms_sign(CMS_SignerInfo *si)
     X509_ALGOR_set0(alg, OBJ_nid2obj(NID_rsassaPss), V_ASN1_SEQUENCE, os);
     return 1;
 }
+#endif
 
 static int rsa_item_sign(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
                          X509_ALGOR *alg1, X509_ALGOR *alg2,
@@ -754,6 +756,7 @@ static int rsa_item_sign(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
     return 2;
 }
 
+#ifndef OPENSSL_NO_CMS
 static RSA_OAEP_PARAMS *rsa_oaep_decode(const X509_ALGOR *alg,
                                         X509_ALGOR **pmaskHash)
 {
@@ -840,8 +843,7 @@ static int rsa_cms_decrypt(CMS_RecipientInfo *ri)
 
  err:
     RSA_OAEP_PARAMS_free(oaep);
-    if (maskHash)
-        X509_ALGOR_free(maskHash);
+    X509_ALGOR_free(maskHash);
     return rv;
 }
 
@@ -901,11 +903,11 @@ static int rsa_cms_encrypt(CMS_RecipientInfo *ri)
     os = NULL;
     rv = 1;
  err:
-    if (oaep)
-        RSA_OAEP_PARAMS_free(oaep);
+    RSA_OAEP_PARAMS_free(oaep);
     ASN1_STRING_free(os);
     return rv;
 }
+#endif
 
 const EVP_PKEY_ASN1_METHOD rsa_asn1_meths[] = {
     {

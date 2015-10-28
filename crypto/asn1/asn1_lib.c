@@ -58,13 +58,12 @@
 
 #include <stdio.h>
 #include <limits.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 
 static int asn1_get_length(const unsigned char **pp, int *inf, long *rl,
                            int max);
 static void asn1_put_length(unsigned char **pp, int length);
-const char ASN1_version[] = "ASN.1" OPENSSL_VERSION_PTEXT;
 
 static int _asn1_check_infinite_end(const unsigned char **p, long len)
 {
@@ -285,7 +284,9 @@ int ASN1_STRING_copy(ASN1_STRING *dst, const ASN1_STRING *str)
     dst->type = str->type;
     if (!ASN1_STRING_set(dst, str->data, str->length))
         return 0;
-    dst->flags = str->flags;
+    /* Copy flags but preserve embed value */
+    dst->flags &= ASN1_STRING_FLAG_EMBED;
+    dst->flags |= str->flags & ~ASN1_STRING_FLAG_EMBED;
     return 1;
 }
 
@@ -317,11 +318,7 @@ int ASN1_STRING_set(ASN1_STRING *str, const void *_data, int len)
     }
     if ((str->length < len) || (str->data == NULL)) {
         c = str->data;
-        if (c == NULL)
-            str->data = OPENSSL_malloc(len + 1);
-        else
-            str->data = OPENSSL_realloc(c, len + 1);
-
+        str->data = OPENSSL_realloc(c, len + 1);
         if (str->data == NULL) {
             ASN1err(ASN1_F_ASN1_STRING_SET, ERR_R_MALLOC_FAILURE);
             str->data = c;
@@ -339,8 +336,7 @@ int ASN1_STRING_set(ASN1_STRING *str, const void *_data, int len)
 
 void ASN1_STRING_set0(ASN1_STRING *str, void *data, int len)
 {
-    if (str->data)
-        OPENSSL_free(str->data);
+    OPENSSL_free(str->data);
     str->data = data;
     str->length = len;
 }
@@ -354,15 +350,12 @@ ASN1_STRING *ASN1_STRING_type_new(int type)
 {
     ASN1_STRING *ret;
 
-    ret = (ASN1_STRING *)OPENSSL_malloc(sizeof(ASN1_STRING));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ASN1err(ASN1_F_ASN1_STRING_TYPE_NEW, ERR_R_MALLOC_FAILURE);
         return (NULL);
     }
-    ret->length = 0;
     ret->type = type;
-    ret->data = NULL;
-    ret->flags = 0;
     return (ret);
 }
 
@@ -370,9 +363,10 @@ void ASN1_STRING_free(ASN1_STRING *a)
 {
     if (a == NULL)
         return;
-    if (a->data && !(a->flags & ASN1_STRING_FLAG_NDEF))
+    if (!(a->flags & ASN1_STRING_FLAG_NDEF))
         OPENSSL_free(a->data);
-    OPENSSL_free(a);
+    if (!(a->flags & ASN1_STRING_FLAG_EMBED))
+        OPENSSL_free(a);
 }
 
 void ASN1_STRING_clear_free(ASN1_STRING *a)

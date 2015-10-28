@@ -59,7 +59,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/crypto.h>
 #include <openssl/x509.h>
 #include <openssl/asn1.h>
@@ -92,6 +92,7 @@ static int send_bio_chars(void *arg, const void *buf, int len)
     return 1;
 }
 
+#ifndef OPENSSL_NO_STDIO
 static int send_fp_chars(void *arg, const void *buf, int len)
 {
     if (!arg)
@@ -100,6 +101,7 @@ static int send_fp_chars(void *arg, const void *buf, int len)
         return 0;
     return 1;
 }
+#endif
 
 typedef int char_io (void *arg, const void *buf, int len);
 

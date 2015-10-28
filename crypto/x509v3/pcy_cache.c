@@ -57,9 +57,10 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
+#include "internal/x509_int.h"
 
 #include "pcy_int.h"
 
@@ -110,8 +111,7 @@ static int policy_cache_create(X509 *x,
  bad_policy:
     if (ret == -1)
         x->ex_flags |= EXFLAG_INVALID_POLICY;
-    if (data)
-        policy_data_free(data);
+    policy_data_free(data);
     sk_POLICYINFO_pop_free(policies, POLICYINFO_free);
     if (ret <= 0) {
         sk_X509_POLICY_DATA_pop_free(cache->data, policy_data_free);
@@ -128,7 +128,7 @@ static int policy_cache_new(X509 *x)
     CERTIFICATEPOLICIES *ext_cpols = NULL;
     POLICY_MAPPINGS *ext_pmaps = NULL;
     int i;
-    cache = OPENSSL_malloc(sizeof(X509_POLICY_CACHE));
+    cache = OPENSSL_malloc(sizeof(*cache));
     if (!cache)
         return 0;
     cache->anyPolicy = NULL;
@@ -200,18 +200,14 @@ static int policy_cache_new(X509 *x)
             goto bad_cache;
     } else if (!policy_cache_set_int(&cache->any_skip, ext_any))
         goto bad_cache;
+    goto just_cleanup;
 
-    if (0) {
  bad_cache:
-        x->ex_flags |= EXFLAG_INVALID_POLICY;
-    }
+    x->ex_flags |= EXFLAG_INVALID_POLICY;
 
-    if (ext_pcons)
-        POLICY_CONSTRAINTS_free(ext_pcons);
-
-    if (ext_any)
-        ASN1_INTEGER_free(ext_any);
-
+ just_cleanup:
+    POLICY_CONSTRAINTS_free(ext_pcons);
+    ASN1_INTEGER_free(ext_any);
     return 1;
 
 }
@@ -220,10 +216,8 @@ void policy_cache_free(X509_POLICY_CACHE *cache)
 {
     if (!cache)
         return;
-    if (cache->anyPolicy)
-        policy_data_free(cache->anyPolicy);
-    if (cache->data)
-        sk_X509_POLICY_DATA_pop_free(cache->data, policy_data_free);
+    policy_data_free(cache->anyPolicy);
+    sk_X509_POLICY_DATA_pop_free(cache->data, policy_data_free);
     OPENSSL_free(cache);
 }
 

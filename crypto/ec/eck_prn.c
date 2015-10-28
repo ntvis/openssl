@@ -62,7 +62,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/ec.h>
 #include <openssl/bn.h>
@@ -318,22 +318,14 @@ int ECPKParameters_print(BIO *bp, const EC_GROUP *x, int off)
  err:
     if (!ret)
         ECerr(EC_F_ECPKPARAMETERS_PRINT, reason);
-    if (p)
-        BN_free(p);
-    if (a)
-        BN_free(a);
-    if (b)
-        BN_free(b);
-    if (gen)
-        BN_free(gen);
-    if (order)
-        BN_free(order);
-    if (cofactor)
-        BN_free(cofactor);
-    if (ctx)
-        BN_CTX_free(ctx);
-    if (buffer != NULL)
-        OPENSSL_free(buffer);
+    BN_free(p);
+    BN_free(a);
+    BN_free(b);
+    BN_free(gen);
+    BN_free(order);
+    BN_free(cofactor);
+    BN_CTX_free(ctx);
+    OPENSSL_free(buffer);
     return (ret);
 }
 
@@ -345,12 +337,14 @@ static int print_bin(BIO *fp, const char *name, const unsigned char *buf,
 
     if (buf == NULL)
         return 1;
-    if (off) {
+    if (off > 0) {
         if (off > 128)
             off = 128;
         memset(str, ' ', off);
         if (BIO_write(fp, str, off) <= 0)
             return 0;
+    } else {
+        off = 0;
     }
 
     if (BIO_printf(fp, "%s", name) <= 0)

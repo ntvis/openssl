@@ -61,8 +61,6 @@
 #include <openssl/err.h>
 #include <openssl/bn.h>
 
-const char ECDSA_version[] = "ECDSA" OPENSSL_VERSION_PTEXT;
-
 static const ECDSA_METHOD *default_ECDSA_method = NULL;
 
 static void *ecdsa_data_new(void);
@@ -105,7 +103,7 @@ static ECDSA_DATA *ECDSA_DATA_new_method(ENGINE *engine)
 {
     ECDSA_DATA *ret;
 
-    ret = (ECDSA_DATA *)OPENSSL_malloc(sizeof(ECDSA_DATA));
+    ret = OPENSSL_malloc(sizeof(*ret));
     if (ret == NULL) {
         ECDSAerr(ECDSA_F_ECDSA_DATA_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return (NULL);
@@ -160,9 +158,7 @@ static void ecdsa_data_free(void *data)
 #endif
     CRYPTO_free_ex_data(CRYPTO_EX_INDEX_ECDSA, r, &r->ex_data);
 
-    OPENSSL_cleanse((void *)r, sizeof(ECDSA_DATA));
-
-    OPENSSL_free(r);
+    OPENSSL_clear_free((void *)r, sizeof(ECDSA_DATA));
 }
 
 ECDSA_DATA *ecdsa_check(EC_KEY *key)
@@ -251,11 +247,11 @@ void *ECDSA_get_ex_data(EC_KEY *d, int idx)
     return (CRYPTO_get_ex_data(&ecdsa->ex_data, idx));
 }
 
-ECDSA_METHOD *ECDSA_METHOD_new(ECDSA_METHOD *ecdsa_meth)
+ECDSA_METHOD *ECDSA_METHOD_new(const ECDSA_METHOD *ecdsa_meth)
 {
     ECDSA_METHOD *ret;
 
-    ret = OPENSSL_malloc(sizeof(ECDSA_METHOD));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ECDSAerr(ECDSA_F_ECDSA_METHOD_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
@@ -263,13 +259,6 @@ ECDSA_METHOD *ECDSA_METHOD_new(ECDSA_METHOD *ecdsa_meth)
 
     if (ecdsa_meth)
         *ret = *ecdsa_meth;
-    else {
-        ret->ecdsa_sign_setup = 0;
-        ret->ecdsa_do_sign = 0;
-        ret->ecdsa_do_verify = 0;
-        ret->name = NULL;
-        ret->flags = 0;
-    }
     ret->flags |= ECDSA_METHOD_FLAG_ALLOCATED;
     return ret;
 }
@@ -314,6 +303,8 @@ void ECDSA_METHOD_set_name(ECDSA_METHOD *ecdsa_method, char *name)
 
 void ECDSA_METHOD_free(ECDSA_METHOD *ecdsa_method)
 {
+    if (!ecdsa_method)
+        return;
     if (ecdsa_method->flags & ECDSA_METHOD_FLAG_ALLOCATED)
         OPENSSL_free(ecdsa_method);
 }

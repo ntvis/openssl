@@ -66,7 +66,7 @@
 
 #include <stdio.h>
 #include <time.h>
-#include <cryptlib.h>
+#include "internal/cryptlib.h"
 #include <openssl/objects.h>
 #include <openssl/rand.h>
 #include <openssl/x509.h>
@@ -89,12 +89,11 @@ OCSP_ONEREQ *OCSP_request_add0_id(OCSP_REQUEST *req, OCSP_CERTID *cid)
 {
     OCSP_ONEREQ *one = NULL;
 
-    if (!(one = OCSP_ONEREQ_new()))
+    if ((one = OCSP_ONEREQ_new()) == NULL)
         goto err;
-    if (one->reqCert)
-        OCSP_CERTID_free(one->reqCert);
+    OCSP_CERTID_free(one->reqCert);
     one->reqCert = cid;
-    if (req && !sk_OCSP_ONEREQ_push(req->tbsRequest->requestList, one))
+    if (req && !sk_OCSP_ONEREQ_push(req->tbsRequest.requestList, one))
         goto err;
     return one;
  err:
@@ -107,6 +106,7 @@ OCSP_ONEREQ *OCSP_request_add0_id(OCSP_REQUEST *req, OCSP_CERTID *cid)
 int OCSP_request_set1_name(OCSP_REQUEST *req, X509_NAME *nm)
 {
     GENERAL_NAME *gen;
+
     gen = GENERAL_NAME_new();
     if (gen == NULL)
         return 0;
@@ -115,9 +115,8 @@ int OCSP_request_set1_name(OCSP_REQUEST *req, X509_NAME *nm)
         return 0;
     }
     gen->type = GEN_DIRNAME;
-    if (req->tbsRequest->requestorName)
-        GENERAL_NAME_free(req->tbsRequest->requestorName);
-    req->tbsRequest->requestorName = gen;
+    GENERAL_NAME_free(req->tbsRequest.requestorName);
+    req->tbsRequest.requestorName = gen;
     return 1;
 }
 
@@ -133,12 +132,13 @@ int OCSP_request_add1_cert(OCSP_REQUEST *req, X509 *cert)
         return 0;
     if (!cert)
         return 1;
-    if (!sig->certs && !(sig->certs = sk_X509_new_null()))
+    if (sig->certs == NULL
+        && (sig->certs = sk_X509_new_null()) == NULL)
         return 0;
 
     if (!sk_X509_push(sig->certs, cert))
         return 0;
-    CRYPTO_add(&cert->references, 1, CRYPTO_LOCK_X509);
+    X509_up_ref(cert);
     return 1;
 }
 
@@ -160,7 +160,7 @@ int OCSP_request_sign(OCSP_REQUEST *req,
     if (!OCSP_request_set1_name(req, X509_get_subject_name(signer)))
         goto err;
 
-    if (!(req->optionalSignature = OCSP_SIGNATURE_new()))
+    if ((req->optionalSignature = OCSP_SIGNATURE_new()) == NULL)
         goto err;
     if (key) {
         if (!X509_check_private_key(signer, key)) {
@@ -230,7 +230,7 @@ int OCSP_resp_count(OCSP_BASICRESP *bs)
 {
     if (!bs)
         return -1;
-    return sk_OCSP_SINGLERESP_num(bs->tbsResponseData->responses);
+    return sk_OCSP_SINGLERESP_num(bs->tbsResponseData.responses);
 }
 
 /* Extract an OCSP_SINGLERESP response with a given index */
@@ -239,7 +239,7 @@ OCSP_SINGLERESP *OCSP_resp_get0(OCSP_BASICRESP *bs, int idx)
 {
     if (!bs)
         return NULL;
-    return sk_OCSP_SINGLERESP_value(bs->tbsResponseData->responses, idx);
+    return sk_OCSP_SINGLERESP_value(bs->tbsResponseData.responses, idx);
 }
 
 /* Look single response matching a given certificate ID */
@@ -255,7 +255,7 @@ int OCSP_resp_find(OCSP_BASICRESP *bs, OCSP_CERTID *id, int last)
         last = 0;
     else
         last++;
-    sresp = bs->tbsResponseData->responses;
+    sresp = bs->tbsResponseData.responses;
     for (i = last; i < sk_OCSP_SINGLERESP_num(sresp); i++) {
         single = sk_OCSP_SINGLERESP_value(sresp, i);
         if (!OCSP_id_cmp(id, single->certId))

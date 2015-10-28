@@ -144,7 +144,7 @@ typedef fd_mask fd_set;
 # define FD_SET(n, p)    (*(p) |= (1 << ((n) % NFDBITS)))
 # define FD_CLR(n, p)    (*(p) &= ~(1 << ((n) % NFDBITS)))
 # define FD_ISSET(n, p)  (*(p) & (1 << ((n) % NFDBITS)))
-# define FD_ZERO(p)      memset((char *)(p), 0, sizeof(*(p)))
+# define FD_ZERO(p)      memset((p), 0, sizeof(*(p)))
 #endif
 
 #define PORT            4433
@@ -178,9 +178,9 @@ int init_client(int *sock, const char *server, int port, int type);
 int init_client_unix(int *sock, const char *server);
 #endif
 int should_retry(int i);
-int extract_port(const char *str, short *port_ptr);
+int extract_port(const char *str, unsigned short *port_ptr);
 int extract_host_port(char *str, char **host_ptr, unsigned char *ip,
-                      short *p);
+                      unsigned short *p);
 
 long bio_dump_callback(BIO *bio, int cmd, const char *argp,
                        int argi, long argl, long ret);
@@ -195,27 +195,24 @@ void tlsext_cb(SSL *s, int client_server, int type, unsigned char *data,
 
 int generate_cookie_callback(SSL *ssl, unsigned char *cookie,
                              unsigned int *cookie_len);
-int verify_cookie_callback(SSL *ssl, unsigned char *cookie,
+int verify_cookie_callback(SSL *ssl, const unsigned char *cookie,
                            unsigned int cookie_len);
 
 typedef struct ssl_excert_st SSL_EXCERT;
 
 void ssl_ctx_set_excert(SSL_CTX *ctx, SSL_EXCERT *exc);
 void ssl_excert_free(SSL_EXCERT *exc);
-int args_excert(char ***pargs, int *pargc,
-                int *badarg, BIO *err, SSL_EXCERT **pexc);
-int load_excert(SSL_EXCERT **pexc, BIO *err);
-void print_ssl_summary(BIO *bio, SSL *s);
+int args_excert(int option, SSL_EXCERT **pexc);
+int load_excert(SSL_EXCERT **pexc);
+void print_ssl_summary(SSL *s);
 #ifdef HEADER_SSL_H
-int args_ssl(char ***pargs, int *pargc, SSL_CONF_CTX *cctx,
-             int *badarg, BIO *err, STACK_OF(OPENSSL_STRING) **pstr);
-int args_ssl_call(SSL_CTX *ctx, BIO *err, SSL_CONF_CTX *cctx,
-                  STACK_OF(OPENSSL_STRING) *str, int no_ecdhe, int no_jpake);
+int config_ctx(SSL_CONF_CTX *cctx, STACK_OF(OPENSSL_STRING) *str,
+               SSL_CTX *ctx, int no_ecdhe, int no_jpake);
 int ssl_ctx_add_crls(SSL_CTX *ctx, STACK_OF(X509_CRL) *crls,
                      int crl_download);
 int ssl_load_stores(SSL_CTX *ctx, const char *vfyCApath,
                     const char *vfyCAfile, const char *chCApath,
                     const char *chCAfile, STACK_OF(X509_CRL) *crls,
                     int crl_download);
-void ssl_ctx_security_debug(SSL_CTX *ctx, BIO *out, int verbose);
+void ssl_ctx_security_debug(SSL_CTX *ctx, int verbose);
 #endif

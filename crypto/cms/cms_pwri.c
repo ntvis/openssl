@@ -52,7 +52,7 @@
  * ====================================================================
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/pem.h>
 #include <openssl/x509v3.h>
@@ -204,8 +204,7 @@ CMS_RecipientInfo *CMS_add0_recipient_password(CMS_ContentInfo *cms,
     EVP_CIPHER_CTX_cleanup(&ctx);
     if (ri)
         M_ASN1_free_of(ri, CMS_RecipientInfo);
-    if (encalg)
-        X509_ALGOR_free(encalg);
+    X509_ALGOR_free(encalg);
     return NULL;
 
 }
@@ -264,8 +263,7 @@ static int kek_unwrap_key(unsigned char *out, size_t *outlen,
     memcpy(out, tmp + 4, *outlen);
     rv = 1;
  err:
-    OPENSSL_cleanse(tmp, inlen);
-    OPENSSL_free(tmp);
+    OPENSSL_clear_free(tmp, inlen);
     return rv;
 
 }
@@ -422,7 +420,7 @@ int cms_RecipientInfo_pwri_crypt(CMS_ContentInfo *cms, CMS_RecipientInfo *ri,
 
     EVP_CIPHER_CTX_cleanup(&kekctx);
 
-    if (!r && key)
+    if (!r)
         OPENSSL_free(key);
     X509_ALGOR_free(kekalg);
 

@@ -118,7 +118,6 @@ struct gost_cipher_info gost_cipher_list[] = {
     /*
      * {NID_id_GostR3411_94_CryptoProParamSet,&GostR3411_94_CryptoProParamSet,0},
      */
-    {NID_id_Gost28147_89_cc, &GostR3411_94_CryptoProParamSet, 0},
     {NID_id_Gost28147_89_CryptoPro_A_ParamSet, &Gost28147_CryptoProParamSetA,
      1},
     {NID_id_Gost28147_89_CryptoPro_B_ParamSet, &Gost28147_CryptoProParamSetB,
@@ -446,7 +445,7 @@ int gost89_set_asn1_parameters(EVP_CIPHER_CTX *ctx, ASN1_TYPE *params)
     gcp->enc_param_set = OBJ_nid2obj(c->paramNID);
 
     len = i2d_GOST_CIPHER_PARAMS(gcp, NULL);
-    p = buf = (unsigned char *)OPENSSL_malloc(len);
+    p = buf = OPENSSL_malloc(len);
     if (!buf) {
         GOST_CIPHER_PARAMS_free(gcp);
         GOSTerr(GOST_F_GOST89_SET_ASN1_PARAMETERS, ERR_R_MALLOC_FAILURE);

@@ -114,7 +114,7 @@
  * SUN MICROSYSTEMS, INC., and contributed to the OpenSSL project.
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/safestack.h>
 
 #if defined(OPENSSL_SYS_WIN32)
@@ -251,7 +251,7 @@ int CRYPTO_get_new_dynlockid(void)
     }
     CRYPTO_w_unlock(CRYPTO_LOCK_DYNLOCK);
 
-    pointer = (CRYPTO_dynlock *) OPENSSL_malloc(sizeof(CRYPTO_dynlock));
+    pointer = OPENSSL_malloc(sizeof(*pointer));
     if (pointer == NULL) {
         CRYPTOerr(CRYPTO_F_CRYPTO_GET_NEW_DYNLOCKID, ERR_R_MALLOC_FAILURE);
         return (0);
@@ -309,8 +309,7 @@ void CRYPTO_destroy_dynlockid(int i)
         --pointer->references;
 #ifdef REF_CHECK
         if (pointer->references < 0) {
-            fprintf(stderr,
-                    "CRYPTO_destroy_dynlockid, bad reference count\n");
+            OPENSSL_showfatal("CRYPTO_destroy_dynlockid, bad reference count\n");
             abort();
         } else
 #endif

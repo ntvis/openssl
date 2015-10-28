@@ -3,7 +3,7 @@
  * Contributed to the OpenSSL Project 2004 by Richard Levitte
  * (richard@levitte.org)
  */
-/* Copyright (c) 2004 Kungliga Tekniska Högskolan
+/* Copyright (c) 2004 Kungliga Tekniska HÃ¶gskolan
  * (Royal Institute of Technology, Stockholm, Sweden).
  * All rights reserved.
  *
@@ -36,9 +36,10 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
+#include "ext_dat.h"
 
 static int i2r_pci(X509V3_EXT_METHOD *method, PROXY_CERT_INFO_EXTENSION *ext,
                    BIO *out, int indent);
@@ -86,7 +87,7 @@ static int process_pci_value(CONF_VALUE *val,
             X509V3_conf_err(val);
             return 0;
         }
-        if (!(*language = OBJ_txt2obj(val->value, 0))) {
+        if ((*language = OBJ_txt2obj(val->value, 0)) == NULL) {
             X509V3err(X509V3_F_PROCESS_PCI_VALUE,
                       X509V3_R_INVALID_OBJECT_IDENTIFIER);
             X509V3_conf_err(val);
@@ -306,18 +307,12 @@ static PROXY_CERT_INFO_EXTENSION *r2i_pci(X509V3_EXT_METHOD *method,
     goto end;
  err:
     ASN1_OBJECT_free(language);
-    if (pathlen) {
-        ASN1_INTEGER_free(pathlen);
-        pathlen = NULL;
-    }
-    if (policy) {
-        ASN1_OCTET_STRING_free(policy);
-        policy = NULL;
-    }
-    if (pci) {
-        PROXY_CERT_INFO_EXTENSION_free(pci);
-        pci = NULL;
-    }
+    ASN1_INTEGER_free(pathlen);
+    pathlen = NULL;
+    ASN1_OCTET_STRING_free(policy);
+    policy = NULL;
+    PROXY_CERT_INFO_EXTENSION_free(pci);
+    pci = NULL;
  end:
     sk_CONF_VALUE_pop_free(vals, X509V3_conf_free);
     return pci;

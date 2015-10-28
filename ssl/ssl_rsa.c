@@ -90,7 +90,7 @@ int SSL_use_certificate_file(SSL *ssl, const char *file, int type)
     int ret = 0;
     X509 *x = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_USE_CERTIFICATE_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -119,8 +119,7 @@ int SSL_use_certificate_file(SSL *ssl, const char *file, int type)
 
     ret = SSL_use_certificate(ssl, x);
  end:
-    if (x != NULL)
-        X509_free(x);
+    X509_free(x);
     BIO_free(in);
     return (ret);
 }
@@ -213,13 +212,10 @@ static int ssl_set_pkey(CERT *c, EVP_PKEY *pkey)
         }
     }
 
-    if (c->pkeys[i].privatekey != NULL)
-        EVP_PKEY_free(c->pkeys[i].privatekey);
+    EVP_PKEY_free(c->pkeys[i].privatekey);
     CRYPTO_add(&pkey->references, 1, CRYPTO_LOCK_EVP_PKEY);
     c->pkeys[i].privatekey = pkey;
     c->key = &(c->pkeys[i]);
-
-    c->valid = 0;
     return (1);
 }
 
@@ -231,7 +227,7 @@ int SSL_use_RSAPrivateKey_file(SSL *ssl, const char *file, int type)
     BIO *in;
     RSA *rsa = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_USE_RSAPRIVATEKEY_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -303,7 +299,7 @@ int SSL_use_PrivateKey_file(SSL *ssl, const char *file, int type)
     BIO *in;
     EVP_PKEY *pkey = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_USE_PRIVATEKEY_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -418,13 +414,11 @@ static int ssl_set_cert(CERT *c, X509 *x)
 
     EVP_PKEY_free(pkey);
 
-    if (c->pkeys[i].x509 != NULL)
-        X509_free(c->pkeys[i].x509);
-    CRYPTO_add(&x->references, 1, CRYPTO_LOCK_X509);
+    X509_free(c->pkeys[i].x509);
+    X509_up_ref(x);
     c->pkeys[i].x509 = x;
     c->key = &(c->pkeys[i]);
 
-    c->valid = 0;
     return (1);
 }
 
@@ -436,7 +430,7 @@ int SSL_CTX_use_certificate_file(SSL_CTX *ctx, const char *file, int type)
     int ret = 0;
     X509 *x = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_CTX_USE_CERTIFICATE_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -465,8 +459,7 @@ int SSL_CTX_use_certificate_file(SSL_CTX *ctx, const char *file, int type)
 
     ret = SSL_CTX_use_certificate(ctx, x);
  end:
-    if (x != NULL)
-        X509_free(x);
+    X509_free(x);
     BIO_free(in);
     return (ret);
 }
@@ -519,7 +512,7 @@ int SSL_CTX_use_RSAPrivateKey_file(SSL_CTX *ctx, const char *file, int type)
     BIO *in;
     RSA *rsa = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_CTX_USE_RSAPRIVATEKEY_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -588,7 +581,7 @@ int SSL_CTX_use_PrivateKey_file(SSL_CTX *ctx, const char *file, int type)
     BIO *in;
     EVP_PKEY *pkey = NULL;
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
         SSLerr(SSL_F_SSL_CTX_USE_PRIVATEKEY_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -646,7 +639,7 @@ int SSL_CTX_use_PrivateKey_ASN1(int type, SSL_CTX *ctx,
  * followed by a sequence of CA certificates that should be sent to the peer
  * in the Certificate message.
  */
-int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
+static int use_certificate_chain_file(SSL_CTX *ctx, SSL *ssl, const char *file)
 {
     BIO *in;
     int ret = 0;
@@ -655,25 +648,28 @@ int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
     ERR_clear_error();          /* clear error stack for
                                  * SSL_CTX_use_certificate() */
 
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
     if (in == NULL) {
-        SSLerr(SSL_F_SSL_CTX_USE_CERTIFICATE_CHAIN_FILE, ERR_R_BUF_LIB);
+        SSLerr(SSL_F_USE_CERTIFICATE_CHAIN_FILE, ERR_R_BUF_LIB);
         goto end;
     }
 
     if (BIO_read_filename(in, file) <= 0) {
-        SSLerr(SSL_F_SSL_CTX_USE_CERTIFICATE_CHAIN_FILE, ERR_R_SYS_LIB);
+        SSLerr(SSL_F_USE_CERTIFICATE_CHAIN_FILE, ERR_R_SYS_LIB);
         goto end;
     }
 
     x = PEM_read_bio_X509_AUX(in, NULL, ctx->default_passwd_callback,
                               ctx->default_passwd_callback_userdata);
     if (x == NULL) {
-        SSLerr(SSL_F_SSL_CTX_USE_CERTIFICATE_CHAIN_FILE, ERR_R_PEM_LIB);
+        SSLerr(SSL_F_USE_CERTIFICATE_CHAIN_FILE, ERR_R_PEM_LIB);
         goto end;
     }
 
-    ret = SSL_CTX_use_certificate(ctx, x);
+    if (ctx)
+        ret = SSL_CTX_use_certificate(ctx, x);
+    else
+        ret = SSL_use_certificate(ssl, x);
 
     if (ERR_peek_error() != 0)
         ret = 0;                /* Key/certificate mismatch doesn't imply
@@ -687,7 +683,12 @@ int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
         int r;
         unsigned long err;
 
-        if (!SSL_CTX_clear_chain_certs(ctx)) {
+        if (ctx)
+            r = SSL_CTX_clear_chain_certs(ctx);
+        else
+            r = SSL_clear_chain_certs(ssl);
+
+        if (r == 0) {
             ret = 0;
             goto end;
         }
@@ -696,17 +697,20 @@ int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
                                        ctx->default_passwd_callback,
                                        ctx->default_passwd_callback_userdata))
                != NULL) {
-            r = SSL_CTX_add0_chain_cert(ctx, ca);
+            if (ctx)
+                r = SSL_CTX_add0_chain_cert(ctx, ca);
+            else
+                r = SSL_add0_chain_cert(ssl, ca);
+            /*
+             * Note that we must not free ca if it was successfully added to
+             * the chain (while we must free the main certificate, since its
+             * reference count is increased by SSL_CTX_use_certificate).
+             */
             if (!r) {
                 X509_free(ca);
                 ret = 0;
                 goto end;
             }
-            /*
-             * Note that we must not free r if it was successfully added to
-             * the chain (while we must free the main certificate, since its
-             * reference count is increased by SSL_CTX_use_certificate).
-             */
         }
         /* When the while loop ends, it's usually just EOF. */
         err = ERR_peek_last_error();
@@ -718,14 +722,22 @@ int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
     }
 
  end:
-    if (x != NULL)
-        X509_free(x);
+    X509_free(x);
     BIO_free(in);
     return (ret);
 }
+
+int SSL_CTX_use_certificate_chain_file(SSL_CTX *ctx, const char *file)
+{
+    return use_certificate_chain_file(ctx, NULL, file);
+}
+
+int SSL_use_certificate_chain_file(SSL *ssl, const char *file)
+{
+    return use_certificate_chain_file(NULL, ssl, file);
+}
 #endif
 
-#ifndef OPENSSL_NO_TLSEXT
 static int serverinfo_find_extension(const unsigned char *serverinfo,
                                      size_t serverinfo_length,
                                      unsigned int extension_type,
@@ -735,31 +747,31 @@ static int serverinfo_find_extension(const unsigned char *serverinfo,
     *extension_data = NULL;
     *extension_length = 0;
     if (serverinfo == NULL || serverinfo_length == 0)
-        return 0;
+        return -1;
     for (;;) {
         unsigned int type = 0;
         size_t len = 0;
 
         /* end of serverinfo */
         if (serverinfo_length == 0)
-            return -1;          /* Extension not found */
+            return 0;           /* Extension not found */
 
         /* read 2-byte type field */
         if (serverinfo_length < 2)
-            return 0;           /* Error */
+            return -1;          /* Error */
         type = (serverinfo[0] << 8) + serverinfo[1];
         serverinfo += 2;
         serverinfo_length -= 2;
 
         /* read 2-byte len field */
         if (serverinfo_length < 2)
-            return 0;           /* Error */
+            return -1;          /* Error */
         len = (serverinfo[0] << 8) + serverinfo[1];
         serverinfo += 2;
         serverinfo_length -= 2;
 
         if (len > serverinfo_length)
-            return 0;           /* Error */
+            return -1;          /* Error */
 
         if (type == extension_type) {
             *extension_data = serverinfo;
@@ -799,10 +811,12 @@ static int serverinfo_srv_add_cb(SSL *s, unsigned int ext_type,
         /* Find the relevant extension from the serverinfo */
         int retval = serverinfo_find_extension(serverinfo, serverinfo_length,
                                                ext_type, out, outlen);
+        if (retval == -1) {
+            *al = SSL_AD_DECODE_ERROR;
+            return -1;          /* Error */
+        }
         if (retval == 0)
-            return 0;           /* Error */
-        if (retval == -1)
-            return -1;          /* No extension found, don't send extension */
+            return 0;           /* No extension found, don't send extension */
         return 1;               /* Send extension */
     }
     return -1;                  /* No serverinfo data found, don't send
@@ -897,7 +911,6 @@ int SSL_CTX_use_serverinfo(SSL_CTX *ctx, const unsigned char *serverinfo,
     return 1;
 }
 
-# ifndef OPENSSL_NO_STDIO
 int SSL_CTX_use_serverinfo_file(SSL_CTX *ctx, const char *file)
 {
     unsigned char *serverinfo = NULL;
@@ -917,7 +930,7 @@ int SSL_CTX_use_serverinfo_file(SSL_CTX *ctx, const char *file)
         goto end;
     }
 
-    bin = BIO_new(BIO_s_file_internal());
+    bin = BIO_new(BIO_s_file());
     if (bin == NULL) {
         SSLerr(SSL_F_SSL_CTX_USE_SERVERINFO_FILE, ERR_R_BUF_LIB);
         goto end;
@@ -987,5 +1000,3 @@ int SSL_CTX_use_serverinfo_file(SSL_CTX *ctx, const char *file)
     BIO_free(bin);
     return ret;
 }
-# endif                         /* OPENSSL_NO_STDIO */
-#endif                          /* OPENSSL_NO_TLSEXT */

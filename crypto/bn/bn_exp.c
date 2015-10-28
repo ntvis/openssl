@@ -109,7 +109,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "bn_lcl.h"
 
 #include <stdlib.h>
@@ -126,13 +126,7 @@
 # include <alloca.h>
 #endif
 
-#undef RSAZ_ENABLED
-#if defined(OPENSSL_BN_ASM_MONT) && \
-        (defined(__x86_64) || defined(__x86_64__) || \
-         defined(_M_AMD64) || defined(_M_X64))
-# include "rsaz_exp.h"
-# define RSAZ_ENABLED
-#endif
+#include "rsaz_exp.h"
 
 #undef SPARC_T4_MONT
 #if defined(OPENSSL_BN_ASM_MONT) && (defined(__sparc__) || defined(__sparc))
@@ -564,7 +558,7 @@ int BN_mod_exp_mont(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
         goto err;
     ret = 1;
  err:
-    if ((in_mont == NULL) && (mont != NULL))
+    if (in_mont == NULL)
         BN_MONT_CTX_free(mont);
     BN_CTX_end(ctx);
     bn_check_top(rr);
@@ -668,12 +662,13 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
     bn_check_top(p);
     bn_check_top(m);
 
-    top = m->top;
-
-    if (!(m->d[0] & 1)) {
+    if (!BN_is_odd(m)) {
         BNerr(BN_F_BN_MOD_EXP_MONT_CONSTTIME, BN_R_CALLED_WITH_EVEN_MODULUS);
         return (0);
     }
+
+    top = m->top;
+
     bits = BN_num_bits(p);
     if (bits == 0) {
         ret = BN_one(rr);
@@ -758,8 +753,7 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
     else
 #endif
         if ((powerbufFree =
-             (unsigned char *)OPENSSL_malloc(powerbufLen +
-                                             MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH))
+             OPENSSL_malloc(powerbufLen + MOD_EXP_CTIME_MIN_CACHE_LINE_WIDTH))
             == NULL)
         goto err;
 
@@ -1128,12 +1122,11 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
         goto err;
     ret = 1;
  err:
-    if ((in_mont == NULL) && (mont != NULL))
+    if (in_mont == NULL)
         BN_MONT_CTX_free(mont);
     if (powerbuf != NULL) {
         OPENSSL_cleanse(powerbuf, powerbufLen);
-        if (powerbufFree)
-            OPENSSL_free(powerbufFree);
+        OPENSSL_free(powerbufFree);
     }
     BN_CTX_end(ctx);
     return (ret);
@@ -1278,7 +1271,7 @@ int BN_mod_exp_mont_word(BIGNUM *rr, BN_ULONG a, const BIGNUM *p,
     }
     ret = 1;
  err:
-    if ((in_mont == NULL) && (mont != NULL))
+    if (in_mont == NULL)
         BN_MONT_CTX_free(mont);
     BN_CTX_end(ctx);
     bn_check_top(rr);

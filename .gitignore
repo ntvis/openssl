@@ -5,8 +5,9 @@
 # editor artefacts
 *.swp
 .#*
-#*#
+\#*#
 *~
+/.dir-locals.el
 
 # Top level excludes
 /Makefile.bak
@@ -26,6 +27,7 @@
 /test/.rnd
 /test/test*.pem
 /test/newkey.pem
+/test/*.log
 
 # Certificate symbolic links
 *.0
@@ -41,23 +43,11 @@
 
 # Auto generated assembly language source files
 *.s
-!/crypto/bn/asm/pa-risc2.s
-!/crypto/bn/asm/pa-risc2W.s
-crypto/aes/asm/a_win32.asm
-crypto/bf/asm/b_win32.asm
-crypto/bn/asm/bn_win32.asm
-crypto/bn/asm/co_win32.asm
-crypto/bn/asm/mt_win32.asm
-crypto/cast/asm/c_win32.asm
-crypto/cpu_win32.asm
-crypto/des/asm/d_win32.asm
-crypto/des/asm/y_win32.asm
-crypto/md5/asm/m5_win32.asm
-crypto/rc4/asm/r4_win32.asm
-crypto/rc5/asm/r5_win32.asm
-crypto/ripemd/asm/rm_win32.asm
-crypto/sha/asm/s1_win32.asm
-crypto/sha/asm/sha512-sse2.asm
+!/crypto/*/asm/*.s
+/crypto/arm*.S
+/crypto/*/*.S
+*.asm
+!/crypto/*/asm/*.asm
 
 # Executables
 /apps/openssl
@@ -77,6 +67,7 @@ crypto/sha/asm/sha512-sse2.asm
 *.so*
 *.dylib*
 *.dll*
+*.exe
 # Exceptions
 !/test/bctest
 !/crypto/des/times/486-50.sol
@@ -109,3 +100,29 @@ ms/nt.mak
 ms/ntdll.mak
 ms/ssleay32.def
 ms/version32.rc
+
+# Files created on other branches that are not held in git, and are not
+# needed on this branch
+include/openssl/asn1_mac.h
+include/openssl/des_old.h
+include/openssl/fips.h
+include/openssl/fips_rand.h
+include/openssl/krb5_asn.h
+include/openssl/kssl.h
+include/openssl/pq_compat.h
+include/openssl/ssl23.h
+include/openssl/tmdiff.h
+include/openssl/ui_compat.h
+test/fips_aesavs.c
+test/fips_desmovs.c
+test/fips_dsatest.c
+test/fips_dssvs.c
+test/fips_hmactest.c
+test/fips_randtest.c
+test/fips_rngvs.c
+test/fips_rsagtest.c
+test/fips_rsastest.c
+test/fips_rsavtest.c
+test/fips_shatest.c
+test/fips_test_suite.c
+test/shatest.c

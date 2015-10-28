@@ -25,6 +25,7 @@
 # Sandy Bridge	    5.05/6.05/7.05+11.6		13.0	+28%/36%/43%
 # Ivy Bridge	    5.05/6.05/7.05+10.3		11.6	+32%/41%/50%
 # Haswell	    4.43/5.29/6.19+7.80		8.79	+39%/49%/59%
+# Skylake	    2.62/3.14/3.62+7.70		8.10	+27%/34%/40%
 # Bulldozer	    5.77/6.89/8.00+13.7		13.7	+42%/50%/58%
 #
 # (*)	there are XOP, AVX1 and AVX2 code pathes, meaning that
@@ -1499,13 +1500,13 @@ ___
 
 # EXCEPTION_DISPOSITION handler (EXCEPTION_RECORD *rec,ULONG64 frame,
 #		CONTEXT *context,DISPATCHER_CONTEXT *disp)
-if ($win64) {
+if ($win64 && $avx) {
 $rec="%rcx";
 $frame="%rdx";
 $context="%r8";
 $disp="%r9";
 
-$code.=<<___ if ($avx);
+$code.=<<___;
 .extern	__imp_RtlVirtualUnwind
 .type	se_handler,\@abi-omnipotent
 .align	16
@@ -1643,7 +1644,7 @@ $code.=<<___ if ($shaext);
 	.rva	.LSEH_end_${func}_shaext
 	.rva	.LSEH_info_${func}_shaext
 ___
-$code.=<<___ if ($avx);
+$code.=<<___;
 .section	.xdata
 .align	8
 .LSEH_info_${func}_xop:

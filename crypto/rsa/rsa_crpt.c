@@ -58,11 +58,16 @@
 
 #include <stdio.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/lhash.h>
 #include "internal/bn_int.h"
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
+
+int RSA_bits(const RSA *r)
+{
+    return (BN_num_bits(r->n));
+}
 
 int RSA_size(const RSA *r)
 {
@@ -100,10 +105,8 @@ int RSA_flags(const RSA *r)
 
 void RSA_blinding_off(RSA *rsa)
 {
-    if (rsa->blinding != NULL) {
-        BN_BLINDING_free(rsa->blinding);
-        rsa->blinding = NULL;
-    }
+    BN_BLINDING_free(rsa->blinding);
+    rsa->blinding = NULL;
     rsa->flags &= ~RSA_FLAG_BLINDING;
     rsa->flags |= RSA_FLAG_NO_BLINDING;
 }
@@ -213,12 +216,11 @@ BN_BLINDING *RSA_setup_blinding(RSA *rsa, BN_CTX *in_ctx)
     CRYPTO_THREADID_current(BN_BLINDING_thread_id(ret));
  err:
     BN_CTX_end(ctx);
-    if (in_ctx == NULL)
+    if (ctx != in_ctx)
         BN_CTX_free(ctx);
-    if (rsa->e == NULL)
+    if (e != rsa->e)
         BN_free(e);
-    if (local_n)
-        BN_free(local_n);
+    BN_free(local_n);
 
     return ret;
 }

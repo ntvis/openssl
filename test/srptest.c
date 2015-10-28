@@ -124,7 +124,7 @@ static int run_srp(const char *username, const char *client_pass,
 int main(int argc, char **argv)
 {
     BIO *bio_err;
-    bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
+    bio_err = BIO_new_fp(stderr, BIO_NOCLOSE | BIO_FP_TEXT);
 
     CRYPTO_malloc_debug_init();
     CRYPTO_dbg_set_options(V_CRYPTO_MDEBUG_ALL);
@@ -148,6 +148,7 @@ int main(int argc, char **argv)
     ERR_remove_thread_state(NULL);
     ERR_free_strings();
     CRYPTO_mem_leaks(bio_err);
+    BIO_free(bio_err);
 
     return 0;
 }

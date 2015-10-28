@@ -202,8 +202,7 @@ int ec_GFp_simple_set_compressed_coordinates(const EC_GROUP *group,
 
  err:
     BN_CTX_end(ctx);
-    if (new_ctx != NULL)
-        BN_CTX_free(new_ctx);
+    BN_CTX_free(new_ctx);
     return ret;
 }
 
@@ -312,15 +311,13 @@ size_t ec_GFp_simple_point2oct(const EC_GROUP *group, const EC_POINT *point,
 
     if (used_ctx)
         BN_CTX_end(ctx);
-    if (new_ctx != NULL)
-        BN_CTX_free(new_ctx);
+    BN_CTX_free(new_ctx);
     return ret;
 
  err:
     if (used_ctx)
         BN_CTX_end(ctx);
-    if (new_ctx != NULL)
-        BN_CTX_free(new_ctx);
+    BN_CTX_free(new_ctx);
     return 0;
 }
 
@@ -413,7 +410,7 @@ int ec_GFp_simple_oct2point(const EC_GROUP *group, EC_POINT *point,
     }
 
     /* test required by X9.62 */
-    if (!EC_POINT_is_on_curve(group, point, ctx)) {
+    if (EC_POINT_is_on_curve(group, point, ctx) <= 0) {
         ECerr(EC_F_EC_GFP_SIMPLE_OCT2POINT, EC_R_POINT_IS_NOT_ON_CURVE);
         goto err;
     }
@@ -422,7 +419,6 @@ int ec_GFp_simple_oct2point(const EC_GROUP *group, EC_POINT *point,
 
  err:
     BN_CTX_end(ctx);
-    if (new_ctx != NULL)
-        BN_CTX_free(new_ctx);
+    BN_CTX_free(new_ctx);
     return ret;
 }

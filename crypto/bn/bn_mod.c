@@ -113,7 +113,7 @@
  * [including the GNU Public Licence.]
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "bn_lcl.h"
 
 int BN_nnmod(BIGNUM *r, const BIGNUM *m, const BIGNUM *d, BN_CTX *ctx)
@@ -254,8 +254,7 @@ int BN_mod_lshift(BIGNUM *r, const BIGNUM *a, int n, const BIGNUM *m,
     ret = BN_mod_lshift_quick(r, r, n, (abs_m ? abs_m : m));
     bn_check_top(r);
 
-    if (abs_m)
-        BN_free(abs_m);
+    BN_free(abs_m);
     return ret;
 }
 

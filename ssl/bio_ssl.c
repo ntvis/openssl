@@ -101,14 +101,12 @@ BIO_METHOD *BIO_f_ssl(void)
 
 static int ssl_new(BIO *bi)
 {
-    BIO_SSL *bs;
+    BIO_SSL *bs = OPENSSL_zalloc(sizeof(*bs));
 
-    bs = (BIO_SSL *)OPENSSL_malloc(sizeof(BIO_SSL));
     if (bs == NULL) {
         BIOerr(BIO_F_SSL_NEW, ERR_R_MALLOC_FAILURE);
         return (0);
     }
-    memset(bs, 0, sizeof(BIO_SSL));
     bi->init = 0;
     bi->ptr = (char *)bs;
     bi->flags = 0;
@@ -130,8 +128,7 @@ static int ssl_free(BIO *a)
         a->init = 0;
         a->flags = 0;
     }
-    if (a->ptr != NULL)
-        OPENSSL_free(a->ptr);
+    OPENSSL_free(a->ptr);
     return (1);
 }
 
@@ -409,6 +406,10 @@ static long ssl_ctrl(BIO *b, int cmd, long num, void *ptr)
         case SSL_ERROR_WANT_CONNECT:
             BIO_set_flags(b, BIO_FLAGS_IO_SPECIAL | BIO_FLAGS_SHOULD_RETRY);
             b->retry_reason = b->next_bio->retry_reason;
+            break;
+        case SSL_ERROR_WANT_X509_LOOKUP:
+            BIO_set_retry_special(b);
+            b->retry_reason = BIO_RR_SSL_X509_LOOKUP;
             break;
         default:
             break;

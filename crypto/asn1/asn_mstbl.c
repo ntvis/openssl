@@ -56,7 +56,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <openssl/crypto.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/conf.h>
 #include <openssl/x509v3.h>
 
@@ -70,8 +70,9 @@ static int stbl_module_init(CONF_IMODULE *md, const CONF *cnf)
     const char *stbl_section;
     STACK_OF(CONF_VALUE) *sktmp;
     CONF_VALUE *mval;
+
     stbl_section = CONF_imodule_get_value(md);
-    if (!(sktmp = NCONF_get_section(cnf, stbl_section))) {
+    if ((sktmp = NCONF_get_section(cnf, stbl_section)) == NULL) {
         ASN1err(ASN1_F_STBL_MODULE_INIT, ASN1_R_ERROR_LOADING_SECTION);
         return 0;
     }
@@ -118,21 +119,21 @@ static int do_tcreate(char *value, char *name)
         goto err;
     for (i = 0; i < sk_CONF_VALUE_num(lst); i++) {
         cnf = sk_CONF_VALUE_value(lst, i);
-        if (!strcmp(cnf->name, "min")) {
+        if (strcmp(cnf->name, "min") == 0) {
             tbl_min = strtoul(cnf->value, &eptr, 0);
             if (*eptr)
                 goto err;
-        } else if (!strcmp(cnf->name, "max")) {
+        } else if (strcmp(cnf->name, "max") == 0) {
             tbl_max = strtoul(cnf->value, &eptr, 0);
             if (*eptr)
                 goto err;
-        } else if (!strcmp(cnf->name, "mask")) {
+        } else if (strcmp(cnf->name, "mask") == 0) {
             if (!ASN1_str2mask(cnf->value, &tbl_mask) || !tbl_mask)
                 goto err;
-        } else if (!strcmp(cnf->name, "flags")) {
-            if (!strcmp(cnf->value, "nomask"))
+        } else if (strcmp(cnf->name, "flags") == 0) {
+            if (strcmp(cnf->value, "nomask") == 0)
                 tbl_flags = STABLE_NO_MASK;
-            else if (!strcmp(cnf->value, "none"))
+            else if (strcmp(cnf->value, "none") == 0)
                 tbl_flags = STABLE_FLAGS_CLEAR;
             else
                 goto err;
@@ -154,7 +155,6 @@ static int do_tcreate(char *value, char *name)
         if (!rv)
             ASN1err(ASN1_F_DO_TCREATE, ERR_R_MALLOC_FAILURE);
     }
-    if (lst)
-        sk_CONF_VALUE_pop_free(lst, X509V3_conf_free);
+    sk_CONF_VALUE_pop_free(lst, X509V3_conf_free);
     return rv;
 }

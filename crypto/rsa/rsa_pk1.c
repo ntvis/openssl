@@ -56,10 +56,10 @@
  * [including the GNU Public Licence.]
  */
 
-#include "constant_time_locl.h"
+#include "internal/constant_time_locl.h"
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/rsa.h>
 #include <openssl/rand.h>
@@ -203,12 +203,11 @@ int RSA_padding_check_PKCS1_type_2(unsigned char *to, int tlen,
     if (num < 11)
         goto err;
 
-    em = OPENSSL_malloc(num);
+    em = OPENSSL_zalloc(num);
     if (em == NULL) {
         RSAerr(RSA_F_RSA_PADDING_CHECK_PKCS1_TYPE_2, ERR_R_MALLOC_FAILURE);
         return -1;
     }
-    memset(em, 0, num);
     /*
      * Always do this zero-padding copy (even when num == flen) to avoid
      * leaking that information. The copy still leaks some side-channel
@@ -266,8 +265,7 @@ int RSA_padding_check_PKCS1_type_2(unsigned char *to, int tlen,
     memcpy(to, em + msg_index, mlen);
 
  err:
-    if (em != NULL)
-        OPENSSL_free(em);
+    OPENSSL_free(em);
     if (mlen == -1)
         RSAerr(RSA_F_RSA_PADDING_CHECK_PKCS1_TYPE_2,
                RSA_R_PKCS_DECODING_ERROR);

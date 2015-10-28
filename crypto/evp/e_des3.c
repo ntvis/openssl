@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #ifndef OPENSSL_NO_DES
 # include <openssl/evp.h>
 # include <openssl/objects.h>
@@ -146,17 +146,6 @@ static int des_ede_cbc_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 {
     DES_EDE_KEY *dat = data(ctx);
 
-# ifdef KSSL_DEBUG
-    {
-        int i;
-        fprintf(stderr, "des_ede_cbc_cipher(ctx=%p, buflen=%d)\n", ctx,
-                ctx->buf_len);
-        fprintf(stderr, "\t iv= ");
-        for (i = 0; i < 8; i++)
-            fprintf(stderr, "%02X", ctx->iv[i]);
-        fprintf(stderr, "\n");
-    }
-# endif                         /* KSSL_DEBUG */
     if (dat->stream.cbc) {
         (*dat->stream.cbc) (in, out, inl, &dat->ks, ctx->iv);
         return 1;
@@ -280,14 +269,8 @@ static int des_ede_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
         }
     }
 # endif
-# ifdef EVP_CHECK_DES_KEY
-    if (DES_set_key_checked(&deskey[0], &dat->ks1)
-        ! !DES_set_key_checked(&deskey[1], &dat->ks2))
-        return 0;
-# else
     DES_set_key_unchecked(&deskey[0], &dat->ks1);
     DES_set_key_unchecked(&deskey[1], &dat->ks2);
-# endif
     memcpy(&dat->ks3, &dat->ks1, sizeof(dat->ks1));
     return 1;
 }
@@ -297,23 +280,6 @@ static int des_ede3_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
 {
     DES_cblock *deskey = (DES_cblock *)key;
     DES_EDE_KEY *dat = data(ctx);
-
-# ifdef KSSL_DEBUG
-    {
-        int i;
-        fprintf(stderr, "des_ede3_init_key(ctx=%p)\n", ctx);
-        fprintf(stderr, "\tKEY= ");
-        for (i = 0; i < 24; i++)
-            fprintf(stderr, "%02X", key[i]);
-        fprintf(stderr, "\n");
-        if (iv) {
-            fprintf(stderr, "\t IV= ");
-            for (i = 0; i < 8; i++)
-                fprintf(stderr, "%02X", iv[i]);
-            fprintf(stderr, "\n");
-        }
-    }
-# endif                         /* KSSL_DEBUG */
 
     dat->stream.cbc = NULL;
 # if defined(SPARC_DES_CAPABLE)
@@ -330,16 +296,9 @@ static int des_ede3_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
         }
     }
 # endif
-# ifdef EVP_CHECK_DES_KEY
-    if (DES_set_key_checked(&deskey[0], &dat->ks1)
-        || DES_set_key_checked(&deskey[1], &dat->ks2)
-        || DES_set_key_checked(&deskey[2], &dat->ks3))
-        return 0;
-# else
     DES_set_key_unchecked(&deskey[0], &dat->ks1);
     DES_set_key_unchecked(&deskey[1], &dat->ks2);
     DES_set_key_unchecked(&deskey[2], &dat->ks3);
-# endif
     return 1;
 }
 

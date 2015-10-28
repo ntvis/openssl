@@ -59,7 +59,7 @@
 /* Original version from Steven Schoch <schoch@sheba.arc.nasa.gov> */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/dsa.h>
 #include <openssl/asn1.h>
@@ -69,8 +69,6 @@
 #ifndef OPENSSL_NO_DH
 # include <openssl/dh.h>
 #endif
-
-const char DSA_version[] = "DSA" OPENSSL_VERSION_PTEXT;
 
 static const DSA_METHOD *default_DSA_method = NULL;
 
@@ -117,7 +115,7 @@ DSA *DSA_new_method(ENGINE *engine)
 {
     DSA *ret;
 
-    ret = (DSA *)OPENSSL_malloc(sizeof(DSA));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         DSAerr(DSA_F_DSA_NEW_METHOD, ERR_R_MALLOC_FAILURE);
         return (NULL);
@@ -143,19 +141,6 @@ DSA *DSA_new_method(ENGINE *engine)
         }
     }
 #endif
-
-    ret->pad = 0;
-    ret->version = 0;
-    ret->p = NULL;
-    ret->q = NULL;
-    ret->g = NULL;
-
-    ret->pub_key = NULL;
-    ret->priv_key = NULL;
-
-    ret->kinv = NULL;
-    ret->r = NULL;
-    ret->method_mont_p = NULL;
 
     ret->references = 1;
     ret->flags = ret->meth->flags & ~DSA_FLAG_NON_FIPS_ALLOW;
@@ -202,20 +187,13 @@ void DSA_free(DSA *r)
 
     CRYPTO_free_ex_data(CRYPTO_EX_INDEX_DSA, r, &r->ex_data);
 
-    if (r->p != NULL)
-        BN_clear_free(r->p);
-    if (r->q != NULL)
-        BN_clear_free(r->q);
-    if (r->g != NULL)
-        BN_clear_free(r->g);
-    if (r->pub_key != NULL)
-        BN_clear_free(r->pub_key);
-    if (r->priv_key != NULL)
-        BN_clear_free(r->priv_key);
-    if (r->kinv != NULL)
-        BN_clear_free(r->kinv);
-    if (r->r != NULL)
-        BN_clear_free(r->r);
+    BN_clear_free(r->p);
+    BN_clear_free(r->q);
+    BN_clear_free(r->g);
+    BN_clear_free(r->pub_key);
+    BN_clear_free(r->priv_key);
+    BN_clear_free(r->kinv);
+    BN_clear_free(r->r);
     OPENSSL_free(r);
 }
 

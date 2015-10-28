@@ -114,7 +114,7 @@
  * SUN MICROSYSTEMS, INC., and contributed to the OpenSSL project.
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 
 #ifndef OPENSSL_NO_DEPRECATED
 static unsigned long (*id_callback) (void) = 0;
@@ -146,7 +146,7 @@ void CRYPTO_THREADID_set_pointer(CRYPTO_THREADID *id, void *ptr)
         /*
          * 'ptr' can be embedded in 'val' without loss of uniqueness
          */
-        id->val = (unsigned long)id->ptr;
+        id->val = (size_t)id->ptr;
         return;
     }
     /*

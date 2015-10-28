@@ -111,7 +111,7 @@
 
 #include <stdio.h>
 #include <time.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include "bn_lcl.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>
@@ -122,6 +122,11 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     int ret = 0, bit, bytes, mask;
     time_t tim;
 
+    if (bits < 0 || (bits == 1 && top > 0)) {
+        BNerr(BN_F_BNRAND, BN_R_BITS_TOO_SMALL);
+        return 0;
+    }
+
     if (bits == 0) {
         BN_zero(rnd);
         return 1;
@@ -131,7 +136,7 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
     bit = (bits - 1) % 8;
     mask = 0xff << (bit + 1);
 
-    buf = (unsigned char *)OPENSSL_malloc(bytes);
+    buf = OPENSSL_malloc(bytes);
     if (buf == NULL) {
         BNerr(BN_F_BNRAND, ERR_R_MALLOC_FAILURE);
         goto err;
@@ -168,7 +173,7 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
         }
     }
 
-    if (top != -1) {
+    if (top >= 0) {
         if (top) {
             if (bit == 0) {
                 buf[0] = 1;
@@ -187,10 +192,7 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
         goto err;
     ret = 1;
  err:
-    if (buf != NULL) {
-        OPENSSL_cleanse(buf, bytes);
-        OPENSSL_free(buf);
-    }
+    OPENSSL_clear_free(buf, bytes);
     bn_check_top(rnd);
     return (ret);
 }
@@ -354,7 +356,6 @@ int BN_generate_dsa_nonce(BIGNUM *out, const BIGNUM *range,
     ret = 1;
 
  err:
-    if (k_bytes)
-        OPENSSL_free(k_bytes);
+    OPENSSL_free(k_bytes);
     return ret;
 }

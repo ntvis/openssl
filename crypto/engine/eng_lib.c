@@ -66,12 +66,11 @@ ENGINE *ENGINE_new(void)
 {
     ENGINE *ret;
 
-    ret = (ENGINE *)OPENSSL_malloc(sizeof(ENGINE));
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ENGINEerr(ENGINE_F_ENGINE_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
     }
-    memset(ret, 0, sizeof(ENGINE));
     ret->struct_ref = 1;
     engine_ref_debug(ret, 0, 1)
         CRYPTO_new_ex_data(CRYPTO_EX_INDEX_ENGINE, ret, &ret->ex_data);
@@ -108,16 +107,14 @@ int engine_free_util(ENGINE *e, int locked)
 {
     int i;
 
-    if (e == NULL) {
-        ENGINEerr(ENGINE_F_ENGINE_FREE_UTIL, ERR_R_PASSED_NULL_PARAMETER);
-        return 0;
-    }
+    if (e == NULL)
+        return 1;
     if (locked)
         i = CRYPTO_add(&e->struct_ref, -1, CRYPTO_LOCK_ENGINE);
     else
         i = --e->struct_ref;
     engine_ref_debug(e, 0, -1)
-        if (i > 0)
+    if (i > 0)
         return 1;
 #ifdef REF_CHECK
     if (i < 0) {
@@ -165,7 +162,7 @@ static int int_cleanup_check(int create)
 
 static ENGINE_CLEANUP_ITEM *int_cleanup_item(ENGINE_CLEANUP_CB *cb)
 {
-    ENGINE_CLEANUP_ITEM *item = OPENSSL_malloc(sizeof(ENGINE_CLEANUP_ITEM));
+    ENGINE_CLEANUP_ITEM *item = OPENSSL_malloc(sizeof(*item));
     if (!item)
         return NULL;
     item->cb = cb;

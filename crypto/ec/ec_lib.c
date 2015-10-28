@@ -68,8 +68,6 @@
 
 #include "ec_lcl.h"
 
-const char EC_version[] = "EC" OPENSSL_VERSION_PTEXT;
-
 /* functions for EC_GROUP objects */
 
 EC_GROUP *EC_GROUP_new(const EC_METHOD *meth)
@@ -85,42 +83,28 @@ EC_GROUP *EC_GROUP_new(const EC_METHOD *meth)
         return NULL;
     }
 
-    ret = OPENSSL_malloc(sizeof *ret);
+    ret = OPENSSL_zalloc(sizeof(*ret));
     if (ret == NULL) {
         ECerr(EC_F_EC_GROUP_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
     }
 
     ret->meth = meth;
-
-    ret->extra_data = NULL;
-    ret->mont_data = NULL;
-
-    ret->generator = NULL;
     ret->order = BN_new();
-    ret->cofactor = NULL;
     if (!ret->order)
         goto err;
     ret->cofactor = BN_new();
     if (!ret->cofactor)
         goto err;
-
-    ret->curve_name = 0;
     ret->asn1_flag = OPENSSL_EC_NAMED_CURVE;
     ret->asn1_form = POINT_CONVERSION_UNCOMPRESSED;
-
-    ret->seed = NULL;
-    ret->seed_len = 0;
-
     if (!meth->group_init(ret))
         goto err;
-
     return ret;
+
  err:
-    if (ret->order)
-        BN_free(ret->order);
-    if (ret->cofactor)
-        BN_free(ret->cofactor);
+    BN_free(ret->order);
+    BN_free(ret->cofactor);
     OPENSSL_free(ret);
     return NULL;
 }
@@ -134,17 +118,11 @@ void EC_GROUP_free(EC_GROUP *group)
         group->meth->group_finish(group);
 
     EC_EX_DATA_free_all_data(&group->extra_data);
-
-    if (group->mont_data)
-        BN_MONT_CTX_free(group->mont_data);
-
+    BN_MONT_CTX_free(group->mont_data);
     EC_POINT_free(group->generator);
     BN_free(group->order);
     BN_free(group->cofactor);
-
-    if (group->seed)
-        OPENSSL_free(group->seed);
-
+    OPENSSL_free(group->seed);
     OPENSSL_free(group);
 }
 
@@ -160,20 +138,13 @@ void EC_GROUP_clear_free(EC_GROUP *group)
 
     EC_EX_DATA_clear_free_all_data(&group->extra_data);
 
-    if (group->mont_data)
-        BN_MONT_CTX_free(group->mont_data);
+    BN_MONT_CTX_free(group->mont_data);
 
     EC_POINT_clear_free(group->generator);
     BN_clear_free(group->order);
     BN_clear_free(group->cofactor);
-
-    if (group->seed) {
-        OPENSSL_cleanse(group->seed, group->seed_len);
-        OPENSSL_free(group->seed);
-    }
-
-    OPENSSL_cleanse(group, sizeof *group);
-    OPENSSL_free(group);
+    OPENSSL_clear_free(group->seed, group->seed_len);
+    OPENSSL_clear_free(group, sizeof(*group));
 }
 
 int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
@@ -214,10 +185,8 @@ int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
             return 0;
     } else {
         /* src->generator == NULL */
-        if (dest->mont_data != NULL) {
-            BN_MONT_CTX_free(dest->mont_data);
-            dest->mont_data = NULL;
-        }
+        BN_MONT_CTX_free(dest->mont_data);
+        dest->mont_data = NULL;
     }
 
     if (src->generator != NULL) {
@@ -244,8 +213,7 @@ int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
     dest->asn1_form = src->asn1_form;
 
     if (src->seed) {
-        if (dest->seed)
-            OPENSSL_free(dest->seed);
+        OPENSSL_free(dest->seed);
         dest->seed = OPENSSL_malloc(src->seed_len);
         if (dest->seed == NULL)
             return 0;
@@ -253,8 +221,7 @@ int EC_GROUP_copy(EC_GROUP *dest, const EC_GROUP *src)
             return 0;
         dest->seed_len = src->seed_len;
     } else {
-        if (dest->seed)
-            OPENSSL_free(dest->seed);
+        OPENSSL_free(dest->seed);
         dest->seed = NULL;
         dest->seed_len = 0;
     }
@@ -394,11 +361,9 @@ point_conversion_form_t EC_GROUP_get_point_conversion_form(const EC_GROUP
 
 size_t EC_GROUP_set_seed(EC_GROUP *group, const unsigned char *p, size_t len)
 {
-    if (group->seed) {
-        OPENSSL_free(group->seed);
-        group->seed = NULL;
-        group->seed_len = 0;
-    }
+    OPENSSL_free(group->seed);
+    group->seed = NULL;
+    group->seed_len = 0;
 
     if (!len || !p)
         return 1;
@@ -513,8 +478,7 @@ int EC_GROUP_cmp(const EC_GROUP *a, const EC_GROUP *b, BN_CTX *ctx)
     b3 = BN_CTX_get(ctx);
     if (!b3) {
         BN_CTX_end(ctx);
-        if (ctx_new)
-            BN_CTX_free(ctx);
+        BN_CTX_free(ctx_new);
         return -1;
     }
 
@@ -541,8 +505,7 @@ int EC_GROUP_cmp(const EC_GROUP *a, const EC_GROUP *b, BN_CTX *ctx)
             !EC_GROUP_get_cofactor(a, a2, ctx) ||
             !EC_GROUP_get_cofactor(b, b2, ctx)) {
             BN_CTX_end(ctx);
-            if (ctx_new)
-                BN_CTX_free(ctx);
+            BN_CTX_free(ctx_new);
             return -1;
         }
         if (BN_cmp(a1, b1) || BN_cmp(a2, b2))
@@ -550,8 +513,7 @@ int EC_GROUP_cmp(const EC_GROUP *a, const EC_GROUP *b, BN_CTX *ctx)
     }
 
     BN_CTX_end(ctx);
-    if (ctx_new)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx_new);
 
     return r;
 }
@@ -579,7 +541,7 @@ int EC_EX_DATA_set_data(EC_EXTRA_DATA **ex_data, void *data,
         /* no explicit entry needed */
         return 1;
 
-    d = OPENSSL_malloc(sizeof *d);
+    d = OPENSSL_malloc(sizeof(*d));
     if (d == NULL)
         return 0;
 
@@ -716,7 +678,7 @@ EC_POINT *EC_POINT_new(const EC_GROUP *group)
         return NULL;
     }
 
-    ret = OPENSSL_malloc(sizeof *ret);
+    ret = OPENSSL_malloc(sizeof(*ret));
     if (ret == NULL) {
         ECerr(EC_F_EC_POINT_NEW, ERR_R_MALLOC_FAILURE);
         return NULL;
@@ -751,8 +713,7 @@ void EC_POINT_clear_free(EC_POINT *point)
         point->meth->point_clear_finish(point);
     else if (point->meth->point_finish != 0)
         point->meth->point_finish(point);
-    OPENSSL_cleanse(point, sizeof *point);
-    OPENSSL_free(point);
+    OPENSSL_clear_free(point, sizeof(*point));
 }
 
 int EC_POINT_copy(EC_POINT *dest, const EC_POINT *src)
@@ -974,6 +935,13 @@ int EC_POINT_is_at_infinity(const EC_GROUP *group, const EC_POINT *point)
     return group->meth->is_at_infinity(group, point);
 }
 
+/*
+ * Check whether an EC_POINT is on the curve or not. Note that the return
+ * value for this function should NOT be treated as a boolean. Return values:
+ *  1: The point is on the curve
+ *  0: The point is not on the curve
+ * -1: An error occurred
+ */
 int EC_POINT_is_on_curve(const EC_GROUP *group, const EC_POINT *point,
                          BN_CTX *ctx)
 {
@@ -1100,10 +1068,8 @@ int ec_precompute_mont_data(EC_GROUP *group)
     BN_CTX *ctx = BN_CTX_new();
     int ret = 0;
 
-    if (group->mont_data) {
-        BN_MONT_CTX_free(group->mont_data);
-        group->mont_data = NULL;
-    }
+    BN_MONT_CTX_free(group->mont_data);
+    group->mont_data = NULL;
 
     if (ctx == NULL)
         goto err;
@@ -1122,7 +1088,6 @@ int ec_precompute_mont_data(EC_GROUP *group)
 
  err:
 
-    if (ctx)
-        BN_CTX_free(ctx);
+    BN_CTX_free(ctx);
     return ret;
 }

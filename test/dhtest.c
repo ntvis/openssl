@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
     out = BIO_new(BIO_s_file());
     if (out == NULL)
         EXIT(1);
-    BIO_set_fp(out, stdout, BIO_NOCLOSE);
+    BIO_set_fp(out, stdout, BIO_NOCLOSE | BIO_FP_TEXT);
 
     _cb = BN_GENCB_new();
     if (!_cb)
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
     BIO_puts(out, "\n");
 
     alen = DH_size(a);
-    abuf = (unsigned char *)OPENSSL_malloc(alen);
+    abuf = OPENSSL_malloc(alen);
     aout = DH_compute_key(abuf, b->pub_key, a);
 
     BIO_puts(out, "key1 =");
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
     BIO_puts(out, "\n");
 
     blen = DH_size(b);
-    bbuf = (unsigned char *)OPENSSL_malloc(blen);
+    bbuf = OPENSSL_malloc(blen);
     bout = DH_compute_key(bbuf, a->pub_key, b);
 
     BIO_puts(out, "key2 =");
@@ -195,14 +195,11 @@ int main(int argc, char *argv[])
  err:
     ERR_print_errors_fp(stderr);
 
-    if (abuf != NULL)
-        OPENSSL_free(abuf);
-    if (bbuf != NULL)
-        OPENSSL_free(bbuf);
+    OPENSSL_free(abuf);
+    OPENSSL_free(bbuf);
     DH_free(b);
     DH_free(a);
-    if (_cb)
-        BN_GENCB_free(_cb);
+    BN_GENCB_free(_cb);
     BIO_free(out);
 # ifdef OPENSSL_SYS_NETWARE
     if (ret)
@@ -488,7 +485,7 @@ static const rfc5114_td rfctd[] = {
 static int run_rfc5114_tests(void)
 {
     int i;
-    for (i = 0; i < (int)(sizeof(rfctd) / sizeof(rfc5114_td)); i++) {
+    for (i = 0; i < (int)OSSL_NELEM(rfctd); i++) {
         DH *dhA, *dhB;
         unsigned char *Z1 = NULL, *Z2 = NULL;
         const rfc5114_td *td = rfctd + i;
@@ -518,9 +515,9 @@ static int run_rfc5114_tests(void)
          * Work out shared secrets using both sides and compare with expected
          * values.
          */
-        if (!DH_compute_key(Z1, dhB->pub_key, dhA))
+        if (DH_compute_key(Z1, dhB->pub_key, dhA) == -1)
             goto bad_err;
-        if (!DH_compute_key(Z2, dhA->pub_key, dhB))
+        if (DH_compute_key(Z2, dhA->pub_key, dhB) == -1)
             goto bad_err;
 
         if (memcmp(Z1, td->Z, td->Z_len))

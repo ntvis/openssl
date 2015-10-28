@@ -52,7 +52,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
 #include "internal/asn1_int.h"
@@ -70,8 +70,7 @@ static int cmac_size(const EVP_PKEY *pkey)
 static void cmac_key_free(EVP_PKEY *pkey)
 {
     CMAC_CTX *cmctx = (CMAC_CTX *)pkey->pkey.ptr;
-    if (cmctx)
-        CMAC_CTX_free(cmctx);
+    CMAC_CTX_free(cmctx);
 }
 
 const EVP_PKEY_ASN1_METHOD cmac_asn1_meth = {

@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/evp.h>
@@ -75,13 +75,10 @@ typedef struct {
 static int pkey_hmac_init(EVP_PKEY_CTX *ctx)
 {
     HMAC_PKEY_CTX *hctx;
-    hctx = OPENSSL_malloc(sizeof(HMAC_PKEY_CTX));
+
+    hctx = OPENSSL_zalloc(sizeof(*hctx));
     if (!hctx)
         return 0;
-    hctx->md = NULL;
-    hctx->ktmp.data = NULL;
-    hctx->ktmp.length = 0;
-    hctx->ktmp.flags = 0;
     hctx->ktmp.type = V_ASN1_OCTET_STRING;
     HMAC_CTX_init(&hctx->ctx);
 
@@ -113,13 +110,9 @@ static int pkey_hmac_copy(EVP_PKEY_CTX *dst, EVP_PKEY_CTX *src)
 static void pkey_hmac_cleanup(EVP_PKEY_CTX *ctx)
 {
     HMAC_PKEY_CTX *hctx = ctx->data;
+
     HMAC_CTX_cleanup(&hctx->ctx);
-    if (hctx->ktmp.data) {
-        if (hctx->ktmp.length)
-            OPENSSL_cleanse(hctx->ktmp.data, hctx->ktmp.length);
-        OPENSSL_free(hctx->ktmp.data);
-        hctx->ktmp.data = NULL;
-    }
+    OPENSSL_clear_free(hctx->ktmp.data, hctx->ktmp.length);
     OPENSSL_free(hctx);
 }
 
@@ -210,11 +203,11 @@ static int pkey_hmac_ctrl_str(EVP_PKEY_CTX *ctx,
     if (!value) {
         return 0;
     }
-    if (!strcmp(type, "key")) {
+    if (strcmp(type, "key") == 0) {
         void *p = (void *)value;
         return pkey_hmac_ctrl(ctx, EVP_PKEY_CTRL_SET_MAC_KEY, -1, p);
     }
-    if (!strcmp(type, "hexkey")) {
+    if (strcmp(type, "hexkey") == 0) {
         unsigned char *key;
         int r;
         long keylen;

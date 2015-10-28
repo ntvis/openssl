@@ -112,7 +112,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/crypto.h>
 #include <openssl/buffer.h>
 #include <openssl/bio.h>
@@ -197,10 +197,10 @@ static CRYPTO_THREADID disabling_threadid;
 
 static void app_info_free(APP_INFO *inf)
 {
+    if (!inf)
+        return;
     if (--(inf->references) <= 0) {
-        if (inf->next != NULL) {
-            app_info_free(inf->next);
-        }
+        app_info_free(inf->next);
         OPENSSL_free(inf);
     }
 }
@@ -321,9 +321,9 @@ static IMPLEMENT_LHASH_COMP_FN(mem, MEM)
 
 static unsigned long mem_hash(const MEM *a)
 {
-    unsigned long ret;
+    size_t ret;
 
-    ret = (unsigned long)a->addr;
+    ret = (size_t)a->addr;
 
     ret = ret * 17851 + (ret >> 14) * 7 + (ret >> 4) * 251;
     return (ret);
@@ -394,7 +394,7 @@ int CRYPTO_push_info_(const char *info, const char *file, int line)
     if (is_MemCheck_on()) {
         MemCheck_off();         /* obtain MALLOC2 lock */
 
-        if ((ami = (APP_INFO *)OPENSSL_malloc(sizeof(APP_INFO))) == NULL) {
+        if ((ami = OPENSSL_malloc(sizeof(*ami))) == NULL) {
             ret = 0;
             goto err;
         }
@@ -478,7 +478,7 @@ void CRYPTO_dbg_malloc(void *addr, int num, const char *file, int line,
 
         if (is_MemCheck_on()) {
             MemCheck_off();     /* make sure we hold MALLOC2 lock */
-            if ((m = (MEM *)OPENSSL_malloc(sizeof(MEM))) == NULL) {
+            if ((m = OPENSSL_malloc(sizeof(*m))) == NULL) {
                 OPENSSL_free(addr);
                 MemCheck_on();  /* release MALLOC2 lock if num_disabled drops
                                  * to 0 */
@@ -559,8 +559,7 @@ void CRYPTO_dbg_free(void *addr, int before_p)
                 fprintf(stderr, "LEVITTE_DEBUG_MEM: [%5ld] - 0x%p (%d)\n",
                         mp->order, mp->addr, mp->num);
 #endif
-                if (mp->app_info != NULL)
-                    app_info_free(mp->app_info);
+                app_info_free(mp->app_info);
                 OPENSSL_free(mp);
             }
 
@@ -623,6 +622,7 @@ void CRYPTO_dbg_realloc(void *addr1, void *addr2, int num,
 typedef struct mem_leak_st {
     BIO *bio;
     int chunks;
+    int seen;
     long bytes;
 } MEM_LEAK;
 
@@ -637,8 +637,11 @@ static void print_leak_doall_arg(const MEM *m, MEM_LEAK *l)
 
 #define BUF_REMAIN (sizeof buf - (size_t)(bufp - buf))
 
-    if (m->addr == (char *)l->bio)
+    /* Is one "leak" the BIO we were given? */
+    if (m->addr == (char *)l->bio) {
+        l->seen = 1;
         return;
+    }
 
     if (options & V_CRYPTO_MDEBUG_TIME) {
         lcl = localtime(&m->time);
@@ -658,8 +661,8 @@ static void print_leak_doall_arg(const MEM *m, MEM_LEAK *l)
         bufp += strlen(bufp);
     }
 
-    BIO_snprintf(bufp, BUF_REMAIN, "number=%d, address=%08lX\n",
-                 m->num, (unsigned long)m->addr);
+    BIO_snprintf(bufp, BUF_REMAIN, "number=%d, address=%p\n",
+                 m->num, m->addr);
     bufp += strlen(bufp);
 
     BIO_puts(l->bio, buf);
@@ -722,8 +725,14 @@ void CRYPTO_mem_leaks(BIO *b)
     ml.bio = b;
     ml.bytes = 0;
     ml.chunks = 0;
+    ml.seen = 0;
     if (mh != NULL)
         lh_MEM_doall_arg(mh, LHASH_DOALL_ARG_FN(print_leak), MEM_LEAK, &ml);
+    /* Don't count the BIO that was passed in as a "leak" */
+    if (ml.seen && ml.chunks >= 1 && ml.bytes >= (int)sizeof (*b)) {
+        ml.chunks--;
+        ml.bytes -= (int)sizeof (*b);
+    }
     if (ml.chunks != 0) {
         BIO_printf(b, "%ld bytes leaked in %d chunks\n", ml.bytes, ml.chunks);
 #ifdef CRYPTO_MDEBUG_ABORT
@@ -753,10 +762,8 @@ void CRYPTO_mem_leaks(BIO *b)
         old_mh_mode = mh_mode;
         mh_mode = CRYPTO_MEM_CHECK_OFF;
 
-        if (mh != NULL) {
-            lh_MEM_free(mh);
-            mh = NULL;
-        }
+        lh_MEM_free(mh);
+        mh = NULL;
         if (amih != NULL) {
             if (lh_APP_INFO_num_items(amih) == 0) {
                 lh_APP_INFO_free(amih);

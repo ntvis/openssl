@@ -115,9 +115,6 @@
 
 #include <stdio.h>
 #include "ssl_locl.h"
-#ifndef OPENSSL_NO_KRB5
-# include "kssl_lcl.h"
-#endif
 #include <openssl/buffer.h>
 #include <openssl/rand.h>
 #include <openssl/objects.h>
@@ -230,6 +227,7 @@ int dtls1_connect(SSL *s)
                 (s->version & 0xff00) != (DTLS1_BAD_VER & 0xff00)) {
                 SSLerr(SSL_F_DTLS1_CONNECT, ERR_R_INTERNAL_ERROR);
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
 
@@ -239,10 +237,12 @@ int dtls1_connect(SSL *s)
             if (s->init_buf == NULL) {
                 if ((buf = BUF_MEM_new()) == NULL) {
                     ret = -1;
+                    s->state = SSL_ST_ERR;
                     goto end;
                 }
                 if (!BUF_MEM_grow(buf, SSL3_RT_MAX_PLAIN_LENGTH)) {
                     ret = -1;
+                    s->state = SSL_ST_ERR;
                     goto end;
                 }
                 s->init_buf = buf;
@@ -251,12 +251,14 @@ int dtls1_connect(SSL *s)
 
             if (!ssl3_setup_buffers(s)) {
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
 
             /* setup buffing BIO */
             if (!ssl_init_wbio_buffer(s, 0)) {
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
 
@@ -269,7 +271,6 @@ int dtls1_connect(SSL *s)
             memset(s->s3->client_random, 0, sizeof(s->s3->client_random));
             s->d1->send_cookie = 0;
             s->hit = 0;
-            s->d1->change_cipher_spec_ok = 0;
             /*
              * Should have been reset by ssl3_get_finished, too.
              */
@@ -363,18 +364,26 @@ int dtls1_connect(SSL *s)
                              sizeof(DTLS1_SCTP_AUTH_LABEL),
                              DTLS1_SCTP_AUTH_LABEL);
 
-                    SSL_export_keying_material(s, sctpauthkey,
+                    if (SSL_export_keying_material(s, sctpauthkey,
                                                sizeof(sctpauthkey),
                                                labelbuffer,
                                                sizeof(labelbuffer), NULL, 0,
-                                               0);
+                                               0) <= 0) {
+                        ret = -1;
+                        s->state = SSL_ST_ERR;
+                        goto end;
+                    }
 
                     BIO_ctrl(SSL_get_wbio(s),
                              BIO_CTRL_DGRAM_SCTP_ADD_AUTH_KEY,
                              sizeof(sctpauthkey), sctpauthkey);
 #endif
 
-                    s->state = SSL3_ST_CR_FINISHED_A;
+                    s->state = SSL3_ST_CR_CHANGE_A;
+                    if (s->tlsext_ticket_expected) {
+                        /* receive renewed session ticket */
+                        s->state = SSL3_ST_CR_SESSION_TICKET_A;
+                    }
                 } else
                     s->state = DTLS1_ST_CR_HELLO_VERIFY_REQUEST_A;
             }
@@ -403,7 +412,7 @@ int dtls1_connect(SSL *s)
                 ret = ssl3_get_server_certificate(s);
                 if (ret <= 0)
                     goto end;
-#ifndef OPENSSL_NO_TLSEXT
+
                 if (s->tlsext_status_expected)
                     s->state = SSL3_ST_CR_CERT_STATUS_A;
                 else
@@ -412,12 +421,7 @@ int dtls1_connect(SSL *s)
                 skip = 1;
                 s->state = SSL3_ST_CR_KEY_EXCH_A;
             }
-#else
-            } else
-                skip = 1;
 
-            s->state = SSL3_ST_CR_KEY_EXCH_A;
-#endif
             s->init_num = 0;
             break;
 
@@ -435,6 +439,7 @@ int dtls1_connect(SSL *s)
              */
             if (!ssl3_check_cert_and_algorithm(s)) {
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
             break;
@@ -496,9 +501,13 @@ int dtls1_connect(SSL *s)
             snprintf((char *)labelbuffer, sizeof(DTLS1_SCTP_AUTH_LABEL),
                      DTLS1_SCTP_AUTH_LABEL);
 
-            SSL_export_keying_material(s, sctpauthkey,
+            if (SSL_export_keying_material(s, sctpauthkey,
                                        sizeof(sctpauthkey), labelbuffer,
-                                       sizeof(labelbuffer), NULL, 0, 0);
+                                       sizeof(labelbuffer), NULL, 0, 0) <= 0) {
+                ret = -1;
+                s->state = SSL_ST_ERR;
+                goto end;
+            }
 
             BIO_ctrl(SSL_get_wbio(s), BIO_CTRL_DGRAM_SCTP_ADD_AUTH_KEY,
                      sizeof(sctpauthkey), sctpauthkey);
@@ -566,6 +575,7 @@ int dtls1_connect(SSL *s)
 #endif
             if (!s->method->ssl3_enc->setup_key_block(s)) {
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
 
@@ -573,6 +583,7 @@ int dtls1_connect(SSL *s)
                                                           SSL3_CHANGE_CIPHER_CLIENT_WRITE))
             {
                 ret = -1;
+                s->state = SSL_ST_ERR;
                 goto end;
             }
 #ifndef OPENSSL_NO_SCTP
@@ -604,8 +615,6 @@ int dtls1_connect(SSL *s)
                 goto end;
             s->state = SSL3_ST_CW_FLUSH;
 
-            /* clear flags */
-            s->s3->flags &= ~SSL3_FLAGS_POP_BUFFER;
             if (s->hit) {
                 s->s3->tmp.next_state = SSL_ST_OK;
 #ifndef OPENSSL_NO_SCTP
@@ -614,17 +623,6 @@ int dtls1_connect(SSL *s)
                     s->s3->tmp.next_state = DTLS1_SCTP_ST_CW_WRITE_SOCK;
                 }
 #endif
-                if (s->s3->flags & SSL3_FLAGS_DELAY_CLIENT_FINISHED) {
-                    s->state = SSL_ST_OK;
-#ifndef OPENSSL_NO_SCTP
-                    if (BIO_dgram_is_sctp(SSL_get_wbio(s))) {
-                        s->d1->next_state = SSL_ST_OK;
-                        s->state = DTLS1_SCTP_ST_CW_WRITE_SOCK;
-                    }
-#endif
-                    s->s3->flags |= SSL3_FLAGS_POP_BUFFER;
-                    s->s3->delay_buf_pop_ret = 0;
-                }
             } else {
 #ifndef OPENSSL_NO_SCTP
                 /*
@@ -635,27 +633,23 @@ int dtls1_connect(SSL *s)
                          0, NULL);
 #endif
 
-#ifndef OPENSSL_NO_TLSEXT
                 /*
                  * Allow NewSessionTicket if ticket expected
                  */
                 if (s->tlsext_ticket_expected)
                     s->s3->tmp.next_state = SSL3_ST_CR_SESSION_TICKET_A;
                 else
-#endif
-
-                    s->s3->tmp.next_state = SSL3_ST_CR_FINISHED_A;
+                    s->s3->tmp.next_state = SSL3_ST_CR_CHANGE_A;
             }
             s->init_num = 0;
             break;
 
-#ifndef OPENSSL_NO_TLSEXT
         case SSL3_ST_CR_SESSION_TICKET_A:
         case SSL3_ST_CR_SESSION_TICKET_B:
             ret = ssl3_get_new_session_ticket(s);
             if (ret <= 0)
                 goto end;
-            s->state = SSL3_ST_CR_FINISHED_A;
+            s->state = SSL3_ST_CR_CHANGE_A;
             s->init_num = 0;
             break;
 
@@ -667,11 +661,20 @@ int dtls1_connect(SSL *s)
             s->state = SSL3_ST_CR_KEY_EXCH_A;
             s->init_num = 0;
             break;
-#endif
+
+        case SSL3_ST_CR_CHANGE_A:
+        case SSL3_ST_CR_CHANGE_B:
+            ret = ssl3_get_change_cipher_spec(s, SSL3_ST_CR_CHANGE_A,
+                                              SSL3_ST_CR_CHANGE_B);
+            if (ret <= 0)
+                goto end;
+
+            s->state = SSL3_ST_CR_FINISHED_A;
+            s->init_num = 0;
+            break;
 
         case SSL3_ST_CR_FINISHED_A:
         case SSL3_ST_CR_FINISHED_B:
-            s->d1->change_cipher_spec_ok = 1;
             ret = ssl3_get_finished(s, SSL3_ST_CR_FINISHED_A,
                                     SSL3_ST_CR_FINISHED_B);
             if (ret <= 0)
@@ -716,13 +719,8 @@ int dtls1_connect(SSL *s)
             /* clean a few things up */
             ssl3_cleanup_key_block(s);
 
-            /*
-             * If we are not 'joining' the last two packets, remove the
-             * buffering now
-             */
-            if (!(s->s3->flags & SSL3_FLAGS_POP_BUFFER))
-                ssl_free_wbio_buffer(s);
-            /* else do it later in ssl3_write */
+            /* Remove the buffering */
+            ssl_free_wbio_buffer(s);
 
             s->init_num = 0;
             s->renegotiate = 0;
@@ -746,6 +744,7 @@ int dtls1_connect(SSL *s)
             goto end;
             /* break; */
 
+        case SSL_ST_ERR:
         default:
             SSLerr(SSL_F_DTLS1_CONNECT, SSL_R_UNKNOWN_STATE);
             ret = -1;
@@ -781,8 +780,7 @@ int dtls1_connect(SSL *s)
              s->in_handshake, NULL);
 #endif
 
-    if (buf != NULL)
-        BUF_MEM_free(buf);
+    BUF_MEM_free(buf);
     if (cb != NULL)
         cb(s, SSL_CB_CONNECT_EXIT, ret);
     return (ret);
@@ -827,5 +825,6 @@ static int dtls1_get_hello_verify(SSL *s)
 
  f_err:
     ssl3_send_alert(s, SSL3_AL_FATAL, al);
+    s->state = SSL_ST_ERR;
     return -1;
 }

@@ -60,17 +60,15 @@
 #include <time.h>
 #include <errno.h>
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/lhash.h>
 #include <openssl/buffer.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 
-#ifndef OPENSSL_NO_STDIO
-
 static int by_file_ctrl(X509_LOOKUP *ctx, int cmd, const char *argc,
                         long argl, char **ret);
-X509_LOOKUP_METHOD x509_file_lookup = {
+static X509_LOOKUP_METHOD x509_file_lookup = {
     "Load file into cache",
     NULL,                       /* new */
     NULL,                       /* free */
@@ -131,7 +129,7 @@ int X509_load_cert_file(X509_LOOKUP *ctx, const char *file, int type)
 
     if (file == NULL)
         return (1);
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
 
     if ((in == NULL) || (BIO_read_filename(in, file) <= 0)) {
         X509err(X509_F_X509_LOAD_CERT_FILE, ERR_R_SYS_LIB);
@@ -174,8 +172,7 @@ int X509_load_cert_file(X509_LOOKUP *ctx, const char *file, int type)
         goto err;
     }
  err:
-    if (x != NULL)
-        X509_free(x);
+    X509_free(x);
     BIO_free(in);
     return (ret);
 }
@@ -189,7 +186,7 @@ int X509_load_crl_file(X509_LOOKUP *ctx, const char *file, int type)
 
     if (file == NULL)
         return (1);
-    in = BIO_new(BIO_s_file_internal());
+    in = BIO_new(BIO_s_file());
 
     if ((in == NULL) || (BIO_read_filename(in, file) <= 0)) {
         X509err(X509_F_X509_LOAD_CRL_FILE, ERR_R_SYS_LIB);
@@ -232,8 +229,7 @@ int X509_load_crl_file(X509_LOOKUP *ctx, const char *file, int type)
         goto err;
     }
  err:
-    if (x != NULL)
-        X509_CRL_free(x);
+    X509_CRL_free(x);
     BIO_free(in);
     return (ret);
 }
@@ -271,5 +267,3 @@ int X509_load_cert_crl_file(X509_LOOKUP *ctx, const char *file, int type)
     sk_X509_INFO_pop_free(inf, X509_INFO_free);
     return count;
 }
-
-#endif                          /* OPENSSL_NO_STDIO */

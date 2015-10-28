@@ -15,7 +15,7 @@ my @sstacklst;
 my @asn1setlst;
 my @p12stklst;
 my @lhashlst;
-my @source = (<include/openssl/*.h>, <crypto/*.[ch]>, <crypto/*/*.[ch]>, <ssl/*.[ch]>, <apps/*.[ch]>);
+my @source = (<include/openssl/*.h>, <crypto/include/internal/*.h>, <crypto/*.[ch]>, <crypto/*/*.[ch]>, <ssl/*.[ch]>, <apps/*.[ch]>);
 foreach $file (@source) {
     next if -l $file;
 
@@ -283,7 +283,7 @@ foreach $type_thing (sort @stacklst) {
 EOF
 }
 
-foreach $type_thing (sort @sstacklst) {
+foreach $type_thing (sort { $a->[0] cmp $b->[0]} @sstacklst) {
     my $t1 = $type_thing->[0];
     my $t2 = $type_thing->[1];
     $new_stackfile .= <<EOF;

@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/lhash.h>
 #include <openssl/objects.h>
 #include <openssl/buffer.h>
@@ -114,14 +114,10 @@ ASN1_OBJECT *OBJ_dup(const ASN1_OBJECT *o)
     return (r);
  err:
     OBJerr(OBJ_F_OBJ_DUP, ERR_R_MALLOC_FAILURE);
-    if (ln != NULL)
-        OPENSSL_free(ln);
-    if (sn != NULL)
-        OPENSSL_free(sn);
-    if (data != NULL)
-        OPENSSL_free(data);
-    if (r != NULL)
-        OPENSSL_free(r);
+    OPENSSL_free(ln);
+    OPENSSL_free(sn);
+    OPENSSL_free(data);
+    OPENSSL_free(r);
     return (NULL);
 }
 

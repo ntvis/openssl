@@ -57,7 +57,7 @@
  */
 
 #include <stdio.h>
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/x509.h>
 #include <openssl/ec.h>
 #include <openssl/bn.h>
@@ -67,8 +67,10 @@
 #include <openssl/asn1t.h>
 #include "internal/asn1_int.h"
 
+#ifndef OPENSSL_NO_CMS
 static int ecdh_cms_decrypt(CMS_RecipientInfo *ri);
 static int ecdh_cms_encrypt(CMS_RecipientInfo *ri);
+#endif
 
 static int eckey_param2type(int *pptype, void **ppval, EC_KEY *ec_key)
 {
@@ -132,8 +134,7 @@ static int eckey_pub_encode(X509_PUBKEY *pk, const EVP_PKEY *pkey)
         ASN1_OBJECT_free(pval);
     else
         ASN1_STRING_free(pval);
-    if (penc)
-        OPENSSL_free(penc);
+    OPENSSL_free(penc);
     return 0;
 }
 
@@ -146,7 +147,7 @@ static EC_KEY *eckey_type2param(int ptype, void *pval)
         int pmlen;
         pm = pstr->data;
         pmlen = pstr->length;
-        if (!(eckey = d2i_ECParameters(NULL, &pm, pmlen))) {
+        if ((eckey = d2i_ECParameters(NULL, &pm, pmlen)) == NULL) {
             ECerr(EC_F_ECKEY_TYPE2PARAM, EC_R_DECODE_ERROR);
             goto ecerr;
         }
@@ -324,7 +325,7 @@ static int eckey_priv_encode(PKCS8_PRIV_KEY_INFO *p8, const EVP_PKEY *pkey)
         ECerr(EC_F_ECKEY_PRIV_ENCODE, ERR_R_EC_LIB);
         return 0;
     }
-    ep = (unsigned char *)OPENSSL_malloc(eplen);
+    ep = OPENSSL_malloc(eplen);
     if (!ep) {
         EC_KEY_set_enc_flags(ec_key, old_flags);
         ECerr(EC_F_ECKEY_PRIV_ENCODE, ERR_R_MALLOC_FAILURE);
@@ -500,14 +501,10 @@ static int do_EC_KEY_print(BIO *bp, const EC_KEY *x, int off, int ktype)
  err:
     if (!ret)
         ECerr(EC_F_DO_EC_KEY_PRINT, reason);
-    if (pub_key)
-        BN_free(pub_key);
-    if (order)
-        BN_free(order);
-    if (ctx)
-        BN_CTX_free(ctx);
-    if (buffer != NULL)
-        OPENSSL_free(buffer);
+    BN_free(pub_key);
+    BN_free(order);
+    BN_CTX_free(ctx);
+    OPENSSL_free(buffer);
     return (ret);
 }
 
@@ -515,7 +512,8 @@ static int eckey_param_decode(EVP_PKEY *pkey,
                               const unsigned char **pder, int derlen)
 {
     EC_KEY *eckey;
-    if (!(eckey = d2i_ECParameters(NULL, pder, derlen))) {
+
+    if ((eckey = d2i_ECParameters(NULL, pder, derlen)) == NULL) {
         ECerr(EC_F_ECKEY_PARAM_DECODE, ERR_R_EC_LIB);
         return 0;
     }
@@ -550,7 +548,8 @@ static int old_ec_priv_decode(EVP_PKEY *pkey,
                               const unsigned char **pder, int derlen)
 {
     EC_KEY *ec;
-    if (!(ec = d2i_ECPrivateKey(NULL, pder, derlen))) {
+
+    if ((ec = d2i_ECPrivateKey(NULL, pder, derlen)) == NULL) {
         ECerr(EC_F_OLD_EC_PRIV_DECODE, EC_R_DECODE_ERROR);
         return 0;
     }
@@ -796,10 +795,8 @@ static int ecdh_cms_set_shared_info(EVP_PKEY_CTX *pctx, CMS_RecipientInfo *ri)
 
     rv = 1;
  err:
-    if (kekalg)
-        X509_ALGOR_free(kekalg);
-    if (der)
-        OPENSSL_free(der);
+    X509_ALGOR_free(kekalg);
+    OPENSSL_free(der);
     return rv;
 }
 
@@ -967,10 +964,8 @@ static int ecdh_cms_encrypt(CMS_RecipientInfo *ri)
     rv = 1;
 
  err:
-    if (penc)
-        OPENSSL_free(penc);
-    if (wrap_alg)
-        X509_ALGOR_free(wrap_alg);
+    OPENSSL_free(penc);
+    X509_ALGOR_free(wrap_alg);
     return rv;
 }
 

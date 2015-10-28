@@ -57,7 +57,7 @@
  *
  */
 
-#include "cryptlib.h"
+#include "internal/cryptlib.h"
 #include <openssl/bn.h>
 #include <openssl/pqueue.h>
 
@@ -68,7 +68,7 @@ typedef struct _pqueue {
 
 pitem *pitem_new(unsigned char *prio64be, void *data)
 {
-    pitem *item = (pitem *)OPENSSL_malloc(sizeof(pitem));
+    pitem *item = OPENSSL_malloc(sizeof(*item));
     if (item == NULL)
         return NULL;
 
@@ -82,27 +82,18 @@ pitem *pitem_new(unsigned char *prio64be, void *data)
 
 void pitem_free(pitem *item)
 {
-    if (item == NULL)
-        return;
-
     OPENSSL_free(item);
 }
 
 pqueue_s *pqueue_new()
 {
-    pqueue_s *pq = (pqueue_s *)OPENSSL_malloc(sizeof(pqueue_s));
-    if (pq == NULL)
-        return NULL;
+    pqueue_s *pq = OPENSSL_zalloc(sizeof(*pq));
 
-    memset(pq, 0x00, sizeof(pqueue_s));
     return pq;
 }
 
 void pqueue_free(pqueue_s *pq)
 {
-    if (pq == NULL)
-        return;
-
     OPENSSL_free(pq);
 }
 
